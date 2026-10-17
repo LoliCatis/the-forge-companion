@@ -1,3 +1,4 @@
 /data/verification/**/*.json text eol=lf
 /data/verification/**/*.csv text eol=lf
 /data/verification/**/*.md text eol=lf
+/data/packs/2026.10.17-bootstrap.1/*.json text eol=lf
