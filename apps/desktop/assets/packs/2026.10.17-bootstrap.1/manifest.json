@@ -1,0 +1,20 @@
+{
+  "packId": "the-forge-bootstrap-2026-10-17-v1",
+  "schemaVersion": 1,
+  "dataVersion": "2026.10.17-bootstrap.1",
+  "createdAt": "2026-10-17T00:00:00Z",
+  "gameVersion": null,
+  "gameUpdateLabel": null,
+  "rulesetVersion": "forge-community-rules.v1",
+  "sources": [],
+  "contentHashes": {
+    "ores.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "weapons.json": "1cc3f72f6d421a852bcf257ab9a655c827e1ce3be15df4839823f1b77ecc2146",
+    "traits.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "probabilities.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "sources.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "observations.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "evidence.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "notes": "First-party empty bootstrap pack. Contains schema-compatible empty collections only; no game facts, community data, or evidence."
+}

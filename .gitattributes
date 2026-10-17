@@ -1,0 +1,3 @@
+/data/verification/**/*.json text eol=lf
+/data/verification/**/*.csv text eol=lf
+/data/verification/**/*.md text eol=lf
