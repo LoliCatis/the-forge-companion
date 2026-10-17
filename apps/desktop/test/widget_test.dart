@@ -234,11 +234,7 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await pumpApp();
-    await tester.runAsync(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-      return true;
-    });
-    await _pumpForUi(tester);
+    await _pumpUntilText(tester, find.text('Кузница: обзор'));
     expect(find.text('Кузница: обзор'), findsOneWidget);
     await chooseLanguage('English', settingsLabel: 'Настройки');
     expect(find.text('Dashboard'), findsWidgets);
@@ -424,6 +420,22 @@ Future<void> _pumpForUi(WidgetTester tester) async {
   for (var frame = 0; frame < 5; frame++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
+}
+
+Future<void> _pumpUntilText(
+  WidgetTester tester,
+  Finder finder, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 25)),
+    );
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+  }
+  throw TestFailure('Timed out waiting for localized widget: $finder');
 }
 
 Future<T> _runAsync<T>(
