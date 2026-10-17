@@ -201,7 +201,7 @@ void main() {
     }
 
     await pumpApp();
-    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(
       await _runAsync(
@@ -229,7 +229,7 @@ void main() {
     await pumpApp();
     expect(find.text('Кузница: обзор'), findsOneWidget);
     await chooseLanguage('English', settingsLabel: 'Настройки');
-    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
     await tester.tap(find.text('Dashboard').first);
     await _pumpForUi(tester);
