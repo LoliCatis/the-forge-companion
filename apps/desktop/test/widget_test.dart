@@ -234,6 +234,11 @@ void main() {
 
     await tester.pumpWidget(const SizedBox.shrink());
     await pumpApp();
+    await tester.runAsync(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return true;
+    });
+    await _pumpForUi(tester);
     expect(find.text('Кузница: обзор'), findsOneWidget);
     await chooseLanguage('English', settingsLabel: 'Настройки');
     expect(find.text('Dashboard'), findsWidgets);
