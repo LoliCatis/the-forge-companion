@@ -170,10 +170,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final appDirectory = await Directory.systemTemp.createTemp(
-      'forge-language-test-',
+    final appDirectory = await _runAsync(
+      tester,
+      () => Directory.systemTemp.createTemp('forge-language-test-'),
     );
-    addTearDown(() => appDirectory.delete(recursive: true));
+    addTearDown(
+      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
+    );
 
     Future<void> pumpApp() async {
       await tester.pumpWidget(
@@ -200,7 +203,13 @@ void main() {
     await pumpApp();
     expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Your forge at a glance'), findsOneWidget);
-    expect(await File('${appDirectory.path}/ui-language.txt').exists(), isFalse);
+    expect(
+      await _runAsync(
+        tester,
+        () => File('${appDirectory.path}/ui-language.txt').exists(),
+      ),
+      isFalse,
+    );
 
     await chooseLanguage('Русский', settingsLabel: 'Settings');
     expect(find.text('Обзор'), findsOneWidget);
@@ -209,7 +218,10 @@ void main() {
     await _pumpForUi(tester);
     expect(find.text('Кузница: обзор'), findsOneWidget);
     expect(
-      await File('${appDirectory.path}/ui-language.txt').readAsString(),
+      await _runAsync(
+        tester,
+        () => File('${appDirectory.path}/ui-language.txt').readAsString(),
+      ),
       'ru',
     );
 
@@ -223,7 +235,10 @@ void main() {
     await _pumpForUi(tester);
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(
-      await File('${appDirectory.path}/ui-language.txt').readAsString(),
+      await _runAsync(
+        tester,
+        () => File('${appDirectory.path}/ui-language.txt').readAsString(),
+      ),
       'en',
     );
 
@@ -240,10 +255,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final appDirectory = await Directory.systemTemp.createTemp(
-      'forge-russian-layout-',
+    final appDirectory = await _runAsync(
+      tester,
+      () => Directory.systemTemp.createTemp('forge-russian-layout-'),
     );
-    addTearDown(() => appDirectory.delete(recursive: true));
+    addTearDown(
+      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
+    );
     await tester.pumpWidget(
       ForgeCompanionApp(
         database: _DashboardStore(),
@@ -282,10 +300,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final appDirectory = await Directory.systemTemp.createTemp(
-      'forge-russian-data-labels-',
+    final appDirectory = await _runAsync(
+      tester,
+      () => Directory.systemTemp.createTemp('forge-russian-data-labels-'),
     );
-    addTearDown(() => appDirectory.delete(recursive: true));
+    addTearDown(
+      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
+    );
     await tester.pumpWidget(
       ForgeCompanionApp(
         database: _LocalizationStore(),
@@ -390,4 +411,13 @@ Future<void> _pumpForUi(WidgetTester tester) async {
   for (var frame = 0; frame < 5; frame++) {
     await tester.pump(const Duration(milliseconds: 100));
   }
+}
+
+Future<T> _runAsync<T>(
+  WidgetTester tester,
+  Future<T> Function() callback,
+) async {
+  final result = await tester.runAsync(callback);
+  if (result == null) throw StateError('Widget test async operation failed.');
+  return result as T;
 }
