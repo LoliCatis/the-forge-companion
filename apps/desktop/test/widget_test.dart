@@ -1,10 +1,8 @@
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:game_data/game_data.dart';
 import 'package:the_forge_companion/main.dart';
 
@@ -322,29 +320,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final screenshotKey = GlobalKey();
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: screenshotKey,
-        child: ForgeCompanionApp(database: _DashboardStore()),
-      ),
-    );
+    await tester.pumpWidget(ForgeCompanionApp(database: _DashboardStore()));
     await tester.pumpAndSettle();
-    await _captureUiScreenshot(tester, screenshotKey, 'dashboard');
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Inventory').first);
     await tester.pumpAndSettle();
-    await _captureUiScreenshot(tester, screenshotKey, 'inventory');
     expect(find.text('Available to forge'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Forge').first);
     await tester.pumpAndSettle();
-    await _captureUiScreenshot(tester, screenshotKey, 'forge');
     expect(find.text('Current recipe'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Optimizer').first);
     await tester.pumpAndSettle();
-    await _captureUiScreenshot(tester, screenshotKey, 'optimizer');
     expect(find.text('Build optimizer'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -395,30 +383,4 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Update test 1 · Ore'), findsOneWidget);
   });
-}
-
-Future<void> _captureUiScreenshot(
-  WidgetTester tester,
-  GlobalKey boundaryKey,
-  String name,
-) async {
-  final boundary = tester.renderObject<RenderRepaintBoundary>(
-    find.byKey(boundaryKey),
-  );
-  final image = boundary.toImageSync(pixelRatio: 1);
-  try {
-    final data = await tester.runAsync(
-      () => image.toByteData(format: ui.ImageByteFormat.png),
-    );
-    if (data == null) throw StateError('Could not encode $name screenshot.');
-    await tester.runAsync(() async {
-      final directory = Directory('build/ui-screenshots');
-      await directory.create(recursive: true);
-      await File('${directory.path}/$name.png').writeAsBytes(
-        data.buffer.asUint8List(),
-      );
-    });
-  } finally {
-    image.dispose();
-  }
 }
