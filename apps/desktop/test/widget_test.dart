@@ -405,10 +405,7 @@ Future<void> _captureUiScreenshot(
   final boundary = tester.renderObject<RenderRepaintBoundary>(
     find.byKey(boundaryKey),
   );
-  final image = await tester.runAsync(
-    () => boundary.toImage(pixelRatio: 1),
-  );
-  if (image == null) throw StateError('Could not render $name screenshot.');
+  final image = boundary.toImageSync(pixelRatio: 1);
   try {
     final data = await tester.runAsync(
       () => image.toByteData(format: ui.ImageByteFormat.png),
