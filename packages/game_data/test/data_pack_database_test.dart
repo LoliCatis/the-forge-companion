@@ -74,7 +74,7 @@ void main() {
         entityId: 'test-weapon-basic',
         fieldName: 'base_damage',
       );
-      expect(observations.map((item) => item.value).toSet(), {12.3, 1114.5});
+      expect(observations.map((item) => item.value).toSet(), {12.3, 14.5});
       expect(observations, hasLength(2));
     },
   );

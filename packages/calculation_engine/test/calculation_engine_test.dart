@@ -95,13 +95,17 @@ void main() {
           description: 'Linear from activation to full threshold.',
         ),
       );
-      final result = calc.calculate(
-        const [OreAmount(ore: ore, quantity: 4)],
-        weaponOddsByOreCount: const {
-          3: {'Dagger': 1},
-        },
+      const selection = [
+        OreAmount(ore: ore, quantity: 2),
+        OreAmount(ore: filler, quantity: 8),
+      ];
+      final unresolved = calc.calculate(selection);
+      final selected = calc.calculate(
+        selection,
+        traitFormulaPolicy: linear,
       );
-      expect(result.weaponClassProbabilities, isNull);
+      expect(unresolved.traits.single.strength, isNull);
+      expect(selected.traits.single.strength, closeTo(0.5, 1e-9));
     });
   });
 
