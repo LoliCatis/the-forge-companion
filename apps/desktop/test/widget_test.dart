@@ -182,7 +182,7 @@ void main() {
           appDirectory: appDirectory,
         ),
       );
-      await tester.pumpAndSettle();
+      await _pumpForUi(tester);
     }
 
     Future<void> chooseLanguage(
@@ -190,11 +190,11 @@ void main() {
       required String settingsLabel,
     }) async {
       await tester.tap(find.text(settingsLabel).first);
-      await tester.pumpAndSettle();
+      await _pumpForUi(tester);
       await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle();
+      await _pumpForUi(tester);
       await tester.tap(find.text(label).last);
-      await tester.pumpAndSettle();
+      await _pumpForUi(tester);
     }
 
     await pumpApp();
@@ -206,7 +206,7 @@ void main() {
     expect(find.text('Обзор'), findsOneWidget);
     expect(find.text('Настройки'), findsWidgets);
     await tester.tap(find.text('Обзор').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Кузница: обзор'), findsOneWidget);
     expect(
       await File('${appDirectory.path}/ui-language.txt').readAsString(),
@@ -220,7 +220,7 @@ void main() {
     expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Settings'), findsWidgets);
     await tester.tap(find.text('Dashboard').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(
       await File('${appDirectory.path}/ui-language.txt').readAsString(),
@@ -250,13 +250,13 @@ void main() {
         appDirectory: appDirectory,
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.text('Settings').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.text('Русский').last);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
 
     for (final label in [
       'Обзор',
@@ -270,7 +270,7 @@ void main() {
       'Настройки',
     ]) {
       await tester.tap(find.text(label).first);
-      await tester.pumpAndSettle();
+      await _pumpForUi(tester);
       expect(tester.takeException(), isNull, reason: 'screen: $label');
     }
   });
@@ -292,25 +292,25 @@ void main() {
         appDirectory: appDirectory,
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.text('Settings').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.text('Русский').last);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
 
     await tester.tap(find.text('Инвентарь').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Test Ore'), findsOneWidget);
     expect(find.text('2.250×'), findsOneWidget);
 
     await tester.tap(find.text('Руды').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Test Ore'), findsOneWidget);
 
     await tester.tap(find.text('Сравнение').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Dashboard'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -321,18 +321,18 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ForgeCompanionApp(database: _DashboardStore()));
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Inventory').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Available to forge'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Forge').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Current recipe'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Optimizer').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Build optimizer'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -348,7 +348,7 @@ void main() {
       tester.view.physicalSize = viewport.size;
       tester.view.devicePixelRatio = viewport.ratio;
       await tester.pumpWidget(ForgeCompanionApp(database: database));
-      await tester.pumpAndSettle();
+      await _pumpForUi(tester);
       expect(find.text('Open Forge'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
@@ -366,12 +366,12 @@ void main() {
         evidenceDirectory: Directory.systemTemp,
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.tap(find.text('Verification').first);
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.text('Session queue'), findsOneWidget);
     await tester.tap(find.text('New session'));
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     await tester.enterText(
       find.widgetWithText(
         TextField,
@@ -380,7 +380,14 @@ void main() {
       'Update test 1',
     );
     await tester.tap(find.text('Create'));
-    await tester.pumpAndSettle();
+    await _pumpForUi(tester);
     expect(find.textContaining('Update test 1 · Ore'), findsOneWidget);
   });
+}
+
+Future<void> _pumpForUi(WidgetTester tester) async {
+  await tester.pump();
+  for (var frame = 0; frame < 5; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
