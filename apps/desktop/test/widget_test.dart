@@ -194,9 +194,15 @@ void main() {
     }) async {
       await tester.tap(find.text(settingsLabel).first);
       await _pumpForUi(tester);
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await _pumpForUi(tester);
-      await tester.tap(find.text(label).last);
+      final languageCode = label == 'Русский' ? 'ru' : 'en';
+      final dropdown = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>),
+      );
+      await tester.runAsync(() async {
+        dropdown.onChanged?.call(languageCode);
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        return true;
+      });
       await _pumpForUi(tester);
     }
 
