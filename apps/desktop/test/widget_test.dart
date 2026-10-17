@@ -218,9 +218,10 @@ void main() {
     await _pumpForUi(tester);
     expect(find.text('Кузница: обзор'), findsOneWidget);
     expect(
-      await _runAsync(
+      await _waitForFileContents(
         tester,
-        () => File('${appDirectory.path}/ui-language.txt').readAsString(),
+        File('${appDirectory.path}/ui-language.txt'),
+        'ru',
       ),
       'ru',
     );
@@ -235,9 +236,10 @@ void main() {
     await _pumpForUi(tester);
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(
-      await _runAsync(
+      await _waitForFileContents(
         tester,
-        () => File('${appDirectory.path}/ui-language.txt').readAsString(),
+        File('${appDirectory.path}/ui-language.txt'),
+        'en',
       ),
       'en',
     );
@@ -421,3 +423,19 @@ Future<T> _runAsync<T>(
   if (result == null) throw StateError('Widget test async operation failed.');
   return result as T;
 }
+
+Future<String> _waitForFileContents(
+  WidgetTester tester,
+  File file,
+  String expected,
+) => _runAsync(tester, () async {
+  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  while (DateTime.now().isBefore(deadline)) {
+    if (await file.exists()) {
+      final contents = await file.readAsString();
+      if (contents == expected) return contents;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  throw StateError('Timed out waiting for ${file.path} to contain $expected');
+});
