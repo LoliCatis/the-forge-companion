@@ -416,7 +416,9 @@ Future<T> _runAsync<T>(
   WidgetTester tester,
   Future<T> Function() callback,
 ) async {
-  final result = await tester.runAsync(callback);
+  final result = await tester.runAsync(
+    () => callback().timeout(const Duration(seconds: 10)),
+  );
   return result as T;
 }
 
