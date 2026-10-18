@@ -126,13 +126,11 @@ class _LocalizationStore extends _DashboardStore {
 }
 
 void main() {
-  test('bundled composite ore wiki manifest is available to the app', () async {
+  test('bundled bootstrap pack manifest is available to the app', () async {
     final manifest = await rootBundle.loadString(
-      'assets/packs/2026.10.17-composite.1/manifest.json',
+      'assets/packs/2026.10.17-bootstrap.1/manifest.json',
     );
-    expect(manifest, contains('2026.10.17-composite.1'));
-    expect(manifest, contains('USER_CONFIRMED_CAPTURE'));
-    expect(manifest, contains('Unknown; live game observed'));
+    expect(manifest, contains('2026.10.17-bootstrap.1'));
   });
 
   testWidgets('opens the desktop dashboard with source status', (tester) async {
