@@ -69,7 +69,7 @@ jobs:
         run: flutter analyze
       - name: Run widget tests
         working-directory: apps/desktop
-        run: flutter test
+        run: flutter test --reporter expanded --timeout 90s
   macos-build:
     name: macOS Build
     runs-on: macos-latest
@@ -95,7 +95,7 @@ jobs:
         run: flutter analyze
       - name: Run Flutter tests
         working-directory: apps/desktop
-        run: flutter test
+        run: flutter test --reporter expanded --timeout 90s
       - name: Compile macOS app
         working-directory: apps/desktop
         run: flutter build macos --debug
@@ -133,7 +133,7 @@ jobs:
         run: flutter analyze
       - name: Run Flutter tests
         working-directory: apps/desktop
-        run: flutter test
+        run: flutter test --reporter expanded --timeout 90s
       - name: Compile Windows app
         working-directory: apps/desktop
         run: >-
