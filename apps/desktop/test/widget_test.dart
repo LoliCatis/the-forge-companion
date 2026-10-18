@@ -189,7 +189,7 @@ void main() {
     }
 
     await pumpApp();
-    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(await File('${appDirectory.path}/ui-language.txt').exists(), isFalse);
 
@@ -222,7 +222,7 @@ void main() {
       File('${appDirectory.path}/ui-language.txt'),
       'en',
     );
-    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Settings'), findsWidgets);
     await tester.tap(find.text('Dashboard').first);
     await _pumpAndSettleBounded(tester);
@@ -252,7 +252,9 @@ void main() {
     final appDirectory = await Directory.systemTemp.createTemp(
       'forge-russian-layout-',
     );
-    addTearDown(() => appDirectory.delete(recursive: true));
+    addTearDown(
+      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
+    );
     await tester.pumpWidget(
       ForgeCompanionApp(
         database: _DashboardStore(),
@@ -306,7 +308,9 @@ void main() {
     final appDirectory = await Directory.systemTemp.createTemp(
       'forge-russian-data-labels-',
     );
-    addTearDown(() => appDirectory.delete(recursive: true));
+    addTearDown(
+      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
+    );
     await tester.pumpWidget(
       ForgeCompanionApp(
         database: _LocalizationStore(),

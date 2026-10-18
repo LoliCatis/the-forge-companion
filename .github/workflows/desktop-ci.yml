@@ -69,7 +69,12 @@ jobs:
         run: flutter analyze
       - name: Run widget tests
         working-directory: apps/desktop
-        run: flutter test --reporter expanded --timeout 90s
+        shell: bash
+        run: |
+          timeout --signal=TERM 120s flutter test --reporter expanded --timeout 60s --plain-name "language switches in place and persists across restarts" test/widget_test.dart
+          timeout --signal=TERM 120s flutter test --reporter expanded --timeout 60s --plain-name "Russian layout opens all primary screens at 1280 by 720" test/widget_test.dart
+          timeout --signal=TERM 120s flutter test --reporter expanded --timeout 60s --plain-name "Russian UI keeps ore and user recipe names unchanged" test/widget_test.dart
+          timeout --signal=TERM 8m flutter test --reporter expanded --timeout 90s
   macos-build:
     name: macOS Build
     runs-on: macos-latest
@@ -93,9 +98,6 @@ jobs:
       - name: Static analysis
         working-directory: apps/desktop
         run: flutter analyze
-      - name: Run Flutter tests
-        working-directory: apps/desktop
-        run: flutter test --reporter expanded --timeout 90s
       - name: Compile macOS app
         working-directory: apps/desktop
         run: flutter build macos --debug
@@ -108,9 +110,6 @@ jobs:
   windows-build:
     name: Windows Build
     runs-on: windows-latest
-    needs: [engine-tests, data-tests, flutter-tests, macos-build, linux-build]
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -125,15 +124,6 @@ jobs:
       - name: Resolve desktop dependencies
         working-directory: apps/desktop
         run: flutter pub get
-      - name: Dart static analysis
-        working-directory: apps/desktop
-        run: dart analyze
-      - name: Static analysis
-        working-directory: apps/desktop
-        run: flutter analyze
-      - name: Run Flutter tests
-        working-directory: apps/desktop
-        run: flutter test --reporter expanded --timeout 90s
       - name: Compile Windows app
         working-directory: apps/desktop
         run: >-
@@ -148,7 +138,6 @@ jobs:
           python ../../tools/sync_desktop_pack.py --verify
           "build/windows/x64/runner/Release/data/flutter_assets"
       - name: Write portable alpha build info
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           $packDirectory = Get-ChildItem -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'data/packs') -Directory |
@@ -171,7 +160,6 @@ jobs:
             'Executable: the_forge_companion.exe'
           ) | Set-Content -LiteralPath (Join-Path $releaseDirectory 'BUILD_INFO.txt') -Encoding utf8
       - name: Package public Windows alpha update
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
           Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -202,25 +190,45 @@ jobs:
             assetName = [System.IO.Path]::GetFileName($zipPath)
           } | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8
       - name: Upload portable Windows alpha
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: the-forge-companion-windows-alpha
-          path: apps/desktop/build/windows/x64/runner/Release/
+          path: |
+            apps/desktop/build/windows/x64/runner/the-forge-companion-windows-alpha.zip
+            apps/desktop/build/windows/x64/runner/windows-alpha-manifest.json
           if-no-files-found: error
           include-hidden-files: true
           compression-level: 0
+
+  publish-windows-prerelease:
+    name: Publish Windows prerelease
+    runs-on: ubuntu-latest
+    needs: [engine-tests, data-tests, flutter-tests, windows-build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Download portable Windows alpha artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: the-forge-companion-windows-alpha
+          path: release-assets
       - name: Publish Windows alpha update release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           $tag = "v0.1.0-alpha.$env:GITHUB_RUN_NUMBER"
-          $packageDirectory = Join-Path $env:GITHUB_WORKSPACE 'apps/desktop/build/windows/x64/runner'
+          $packageDirectory = Join-Path $env:GITHUB_WORKSPACE 'release-assets'
           $zipPath = Join-Path $packageDirectory 'the-forge-companion-windows-alpha.zip'
           $manifestPath = Join-Path $packageDirectory 'windows-alpha-manifest.json'
+          $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+          if ($manifest.commit -ne $env:GITHUB_SHA) { throw 'Artifact commit does not match workflow commit.' }
+          if ($manifest.platform -ne 'windows-x64') { throw 'Artifact is not a Windows x64 build.' }
+          if ((Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifest.sha256) {
+            throw 'Artifact SHA-256 does not match its manifest.'
+          }
           gh release view $tag --repo $env:GH_REPO *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag $zipPath $manifestPath --repo $env:GH_REPO --clobber
