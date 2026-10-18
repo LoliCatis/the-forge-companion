@@ -175,7 +175,7 @@ void main() {
           appDirectory: appDirectory,
         ),
       );
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
     }
 
     Future<void> chooseLanguage(
@@ -183,11 +183,11 @@ void main() {
       required String settingsLabel,
     }) async {
       await tester.tap(find.text(settingsLabel).first);
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
       await tester.tap(find.byType(DropdownButtonFormField<String>));
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
       await tester.tap(find.text(label).last);
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
     }
 
     await pumpApp();
@@ -204,7 +204,7 @@ void main() {
     expect(find.text('Обзор'), findsOneWidget);
     expect(find.text('Настройки'), findsWidgets);
     await tester.tap(find.text('Обзор').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Кузница: обзор'), findsOneWidget);
     expect(
       await _runAsync(
@@ -227,7 +227,7 @@ void main() {
     expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Settings'), findsWidgets);
     await tester.tap(find.text('Dashboard').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(
       await _runAsync(
@@ -261,13 +261,13 @@ void main() {
         appDirectory: appDirectory,
       ),
     );
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('Settings').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('Русский').last);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
 
     for (final label in [
       'Обзор',
@@ -275,25 +275,25 @@ void main() {
       'Сравнение',
     ]) {
       await tester.tap(find.text(label).first);
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
       expect(tester.takeException(), isNull, reason: 'screen: $label');
     }
     await tester.tap(find.text('ДАННЫЕ / ВИКИ').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     for (final label in [
       'Руды',
       'Состояние данных',
       'Проверка вики',
     ]) {
       await tester.tap(find.text(label).first);
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
       expect(tester.takeException(), isNull, reason: 'screen: $label');
     }
     for (final label in [
       'Настройки',
     ]) {
       await tester.tap(find.text(label).first);
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
       expect(tester.takeException(), isNull, reason: 'screen: $label');
     }
   });
@@ -315,22 +315,22 @@ void main() {
         appDirectory: appDirectory,
       ),
     );
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('Settings').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('Русский').last);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
 
     await tester.tap(find.text('ДАННЫЕ / ВИКИ').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('Руды').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Aite'), findsOneWidget);
 
     await tester.tap(find.text('Сравнение').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Dashboard'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
@@ -341,14 +341,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ForgeCompanionApp(database: _DashboardStore()));
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Forge').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Test recipe'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Find ore composition'));
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Suggested ore compositions'), findsOneWidget);
     expect(find.text('No rankable mixes. Add multiplier values to the catalog first.'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -365,7 +365,7 @@ void main() {
       tester.view.physicalSize = viewport.size;
       tester.view.devicePixelRatio = viewport.ratio;
       await tester.pumpWidget(ForgeCompanionApp(database: database));
-      await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+      await _pumpAndSettleBounded(tester);
       expect(find.text('Open Forge'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
@@ -383,14 +383,14 @@ void main() {
         evidenceDirectory: Directory.systemTemp,
       ),
     );
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('DATA / RESEARCH').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.tap(find.text('Wiki review').first);
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.text('Session queue'), findsOneWidget);
     await tester.tap(find.text('New session'));
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     await tester.enterText(
       find.widgetWithText(
         TextField,
@@ -399,9 +399,17 @@ void main() {
       'Update test 1',
     );
     await tester.tap(find.text('Create'));
-    await tester.pumpAndSettle(timeout: const Duration(seconds: 10));
+    await _pumpAndSettleBounded(tester);
     expect(find.textContaining('Update test 1 · Ore'), findsOneWidget);
   });
+}
+
+Future<void> _pumpAndSettleBounded(WidgetTester tester) async {
+  for (var attempt = 0; attempt < 100; attempt++) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (!tester.binding.hasScheduledFrame) return;
+  }
+  throw TestFailure('Widget tree did not settle within 100 frames.');
 }
 
 Future<T> _runAsync<T>(
