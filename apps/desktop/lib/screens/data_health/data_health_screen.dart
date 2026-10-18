@@ -259,7 +259,7 @@ class _DataHealthPageState extends State<DataHealthPage> {
                     ),
                     const SizedBox(height: 8),
                     for (final observation in verifiedObservations)
-                      ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: const Icon(Icons.verified_outlined, color: _accent), title: AppText('${observation.entityType} · ${observation.entityId} · ${observation.fieldName}', translate: false, maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: AppText('${observation.value} · ${observation.observedAt.toIso8601String().substring(0, 10)} · evidence ${observation.evidenceId ?? '—'}', translate: false, maxLines: 2, overflow: TextOverflow.ellipsis)),
+                      ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: const Icon(Icons.verified_outlined, color: _accent), title: AppText('${observation.entityType} · ${observation.entityId} · ${observation.fieldName}', maxLines: 1, overflow: TextOverflow.ellipsis), subtitle: AppText('${observation.value} · ${observation.observedAt.toIso8601String().substring(0, 10)} · evidence ${observation.evidenceId ?? '—'}', maxLines: 2, overflow: TextOverflow.ellipsis)),
                   ],
                 ),
               ),
@@ -344,9 +344,9 @@ class _DataHealthPageState extends State<DataHealthPage> {
             for (final issue in filtered) ...[
               AppCard(padding: const EdgeInsets.fromLTRB(15, 12, 8, 12), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Wrap(spacing: 8, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [AppText('${issue.entityType} · ${issue.entityId}', translate: false, style: const TextStyle(fontWeight: FontWeight.w600)), StatusBadge(issue.status)]),
+                  Wrap(spacing: 8, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [AppText('${issue.entityType} · ${issue.entityId}', style: const TextStyle(fontWeight: FontWeight.w600)), StatusBadge(issue.status)]),
                   const SizedBox(height: 5),
-                  AppText(issue.fieldName, translate: false, style: const TextStyle(color: _accent, fontSize: 12)),
+                  AppText(issue.fieldName, style: const TextStyle(color: _accent, fontSize: 12)),
                   const SizedBox(height: 4),
                   AppText(issue.message, softWrap: true, style: const TextStyle(color: _muted, fontSize: 13)),
                 ])),

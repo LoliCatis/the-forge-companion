@@ -1,10 +1,10 @@
 part of '../../app/app.dart';
 
 class DashboardPage extends StatelessWidget {
-  const DashboardPage({super.key, required this.database, this.onOpenForge, this.onOpenInventory, this.onOpenCompare});
+  const DashboardPage({super.key, required this.database, this.onOpenForge, this.onOpenOres, this.onOpenCompare});
   final GameDataStore database;
   final VoidCallback? onOpenForge;
-  final VoidCallback? onOpenInventory;
+  final VoidCallback? onOpenOres;
   final VoidCallback? onOpenCompare;
   @override
   Widget build(BuildContext context) => _Page(
@@ -15,11 +15,9 @@ class DashboardPage extends StatelessWidget {
       builder: (context, snapshot) {
         final data = snapshot.data;
         if (!snapshot.hasData) return const LinearProgressIndicator();
-        final inventory = data![2] as List<InventoryRecord>;
-        final metrics = data[4] as VerificationMetrics;
-        final available = inventory.fold<int>(0, (sum, item) => sum + (item.quantity - item.protectedQuantity).clamp(0, item.quantity).toInt());
-        final types = inventory.where((item) => item.quantity > 0).length;
+        final ores = data![2] as List<OreRecord>;
         final builds = data[3] as List<SavedBuildRecord>;
+        final metrics = data[4] as VerificationMetrics;
         final warnings = metrics.conflicts + metrics.pendingReview;
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           AppCard(accent: true, padding: const EdgeInsets.all(22), child: LayoutBuilder(builder: (context, constraints) {
@@ -30,22 +28,21 @@ class DashboardPage extends StatelessWidget {
               const SizedBox(height: 7),
               AppText('Active data · ${data[0] ?? 'not installed'}', style: const TextStyle(color: _muted, fontSize: 12)),
             ]);
-            final actions = Wrap(spacing: 9, runSpacing: 8, children: [PrimaryButton(label: 'Open Forge', icon: Icons.local_fire_department_outlined, onPressed: onOpenForge), SecondaryButton(label: 'Inventory', icon: Icons.inventory_2_outlined, onPressed: onOpenInventory)]);
+            final actions = Wrap(spacing: 9, runSpacing: 8, children: [PrimaryButton(label: 'Open Forge', icon: Icons.local_fire_department_outlined, onPressed: onOpenForge), SecondaryButton(label: 'Browse ores', icon: Icons.diamond_outlined, onPressed: onOpenOres)]);
             return constraints.maxWidth < 760 ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [intro, const SizedBox(height: 18), actions]) : Row(children: [Expanded(child: intro), const SizedBox(width: 22), actions]);
           })),
           const SizedBox(height: 14),
           LayoutBuilder(builder: (context, constraints) {
-            final cols = constraints.maxWidth >= 900 ? 4 : constraints.maxWidth >= 560 ? 2 : 1;
+            final cols = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 560 ? 2 : 1;
             return GridView.count(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: cols, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: cols == 1 ? 3.3 : 1.55, children: [
-              MetricCard('Ore types in inventory', '$types', 'with stored quantity', Icons.diamond_outlined),
-              MetricCard('Usable quantity', '$available', 'after protected stock', Icons.inventory_2_outlined),
-              MetricCard('Last Forge scenario', builds.isEmpty ? '—' : builds.first.name, builds.isEmpty ? 'No saved recipes yet' : '${builds.length} saved ${builds.length == 1 ? 'recipe' : 'recipes'}', Icons.history),
+              MetricCard('Ore entries in catalog', '${ores.length}', 'available for test recipes', Icons.diamond_outlined),
+              MetricCard('Saved test recipes', '${builds.length}', builds.isEmpty ? 'No saved recipes yet' : 'ready to compare', Icons.history),
               MetricCard('Verified coverage', '${metrics.gameVerified}', 'of ${metrics.gameVerified + metrics.communityOnly} known fields', Icons.verified_outlined),
             ]);
           }),
           if (warnings > 0) ...[
             const SizedBox(height: 14),
-            WarningBanner(icon: Icons.warning_amber_rounded, text: '$warnings data items need attention. Review conflicts and pending captures in Data Health.'),
+            WarningBanner(icon: Icons.warning_amber_rounded, text: '$warnings data items need attention. Review conflicts and pending captures in Data status.'),
           ],
           const SizedBox(height: 14),
           AppCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -53,7 +50,7 @@ class DashboardPage extends StatelessWidget {
             const SizedBox(height: 14),
             Wrap(spacing: 10, runSpacing: 10, children: [
               _workspaceLink(Icons.local_fire_department_outlined, 'Forge', 'Configure and inspect a recipe', onOpenForge),
-              _workspaceLink(Icons.inventory_2_outlined, 'Inventory', 'Track available and protected ores', onOpenInventory),
+              _workspaceLink(Icons.diamond_outlined, 'Ores', 'Review catalog values and sources', onOpenOres),
               _workspaceLink(Icons.compare_arrows, 'Compare', 'Review saved recipes side by side', onOpenCompare),
             ]),
           ])),
@@ -70,7 +67,7 @@ Widget _workspaceLink(IconData icon, String title, String detail, VoidCallback? 
 Future<List<Object?>> _loadDashboard(GameDataStore database) async => [
   await database.getActiveDataVersion(),
   await database.getActiveRulesetVersion(),
-  await database.getInventory(),
+  await database.searchOres(''),
   await database.getSavedBuilds(),
   await database.getVerificationMetrics(),
 ];

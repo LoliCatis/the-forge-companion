@@ -22,7 +22,7 @@ class GameDatabase implements GameDataStore {
     final db = await databaseFactoryFfi.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 7,
+        version: 8,
         onCreate: (db, version) async {
           await db.execute('PRAGMA foreign_keys = ON');
           await db.execute('''
@@ -67,13 +67,6 @@ class GameDatabase implements GameDataStore {
               stat_modifier REAL,
               stacking_rule TEXT,
               scaling_rule TEXT NOT NULL DEFAULT 'UNKNOWN'
-            )
-          ''');
-          await db.execute('''
-            CREATE TABLE inventory (
-              ore_id TEXT PRIMARY KEY REFERENCES ores(id) ON DELETE CASCADE,
-              quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity >= 0),
-              protected_quantity INTEGER NOT NULL DEFAULT 0 CHECK(protected_quantity >= 0 AND protected_quantity <= quantity)
             )
           ''');
           await db.execute('''
@@ -166,7 +159,8 @@ class GameDatabase implements GameDataStore {
               id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
               recipe_json TEXT NOT NULL,
-              created_at TEXT NOT NULL
+              created_at TEXT NOT NULL,
+              craft_goal TEXT
             )
           ''');
           await db.execute('''
@@ -270,6 +264,11 @@ class GameDatabase implements GameDataStore {
               'ALTER TABLE verification_sessions ADD COLUMN observed_live_at TEXT',
             );
             await _createRepositoryIntakeTable(db);
+          }
+          if (oldVersion < 8) {
+            await db.execute(
+              'ALTER TABLE saved_builds ADD COLUMN craft_goal TEXT',
+            );
           }
         },
       ),
@@ -756,8 +755,8 @@ class GameDatabase implements GameDataStore {
   }) async {
     final rows = await _db.rawQuery(
       '''
-      SELECT ores.*, COALESCE(inventory.quantity, 0) AS inventory_quantity
-      FROM ores LEFT JOIN inventory ON inventory.ore_id = ores.id
+      SELECT ores.*
+      FROM ores
       WHERE lower(ores.name) LIKE ? ORDER BY ores.name COLLATE NOCASE
     ''',
       ['%${query.toLowerCase()}%'],
@@ -863,90 +862,6 @@ class GameDatabase implements GameDataStore {
     );
   }
 
-  Future<List<InventoryRecord>> getInventory({
-    DataPolicy policy = DataPolicy.bestAvailable,
-  }) async {
-    final rows = await _db.rawQuery('''
-      SELECT ores.id AS ore_id, ores.name AS ore_name, ores.multiplier,
-             ores.rarity, ores.confidence,
-             GROUP_CONCAT(ore_traits.effect_type, '|') AS effect_tags,
-             GROUP_CONCAT(ore_traits.effect_type || ':' || ore_traits.activation_threshold, '|') AS effect_thresholds,
-             ores.verification_status, COALESCE(inventory.quantity, 0) AS quantity,
-             COALESCE(inventory.protected_quantity, 0) AS protected_quantity
-      FROM ores LEFT JOIN inventory ON inventory.ore_id = ores.id
-      LEFT JOIN ore_traits ON ore_traits.ore_id = ores.id
-      GROUP BY ores.id
-      ORDER BY ores.name COLLATE NOCASE
-    ''');
-    final resolvedOres = {
-      for (final ore in await searchOres('', policy: policy)) ore.id: ore,
-    };
-    return rows.map((row) {
-      final inventory = InventoryRecord.fromMap(row);
-      final ore = resolvedOres[inventory.oreId];
-      if (ore == null) return inventory;
-      return InventoryRecord(
-        oreId: inventory.oreId,
-        oreName: inventory.oreName,
-        quantity: inventory.quantity,
-        protectedQuantity: inventory.protectedQuantity,
-        verificationStatus: ore.verificationStatus,
-        multiplier: ore.multiplier,
-        rarity: ore.rarity,
-        confidence: ore.confidence,
-        effectTags: ore.traits
-            .map((trait) => trait.effectType ?? trait.name)
-            .toSet(),
-        effectActivationThresholds: {
-          for (final trait in ore.traits)
-            if (trait.activationThreshold != null)
-              (trait.effectType ?? trait.name): trait.activationThreshold!,
-        },
-      );
-    }).toList(growable: false);
-  }
-
-  Future<void> setInventoryQuantity(
-    String oreId,
-    int quantity, {
-    int protectedQuantity = 0,
-  }) async {
-    if (quantity < 0) throw ArgumentError.value(quantity, 'quantity');
-    if (protectedQuantity < 0 || protectedQuantity > quantity) {
-      throw ArgumentError.value(protectedQuantity, 'protectedQuantity');
-    }
-    await _db.insert('inventory', {
-      'ore_id': oreId,
-      'quantity': quantity,
-      'protected_quantity': protectedQuantity,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
-  }
-
-  Future<void> setProtectedQuantity(String oreId, int protectedQuantity) async {
-    final rows = await _db.query(
-      'inventory',
-      columns: ['quantity'],
-      where: 'ore_id = ?',
-      whereArgs: [oreId],
-    );
-    if (rows.isEmpty) {
-      if (protectedQuantity != 0) {
-        throw ArgumentError('Set the inventory quantity before protecting it');
-      }
-      return;
-    }
-    final quantity = rows.single['quantity']! as int;
-    if (protectedQuantity < 0 || protectedQuantity > quantity) {
-      throw ArgumentError.value(protectedQuantity, 'protectedQuantity');
-    }
-    await _db.update(
-      'inventory',
-      {'protected_quantity': protectedQuantity},
-      where: 'ore_id = ?',
-      whereArgs: [oreId],
-    );
-  }
-
   Future<int> countByVerificationStatus(String status) async {
     final result = await _db.rawQuery(
       'SELECT COUNT(*) AS count FROM ores WHERE verification_status = ?',
@@ -969,19 +884,13 @@ class GameDatabase implements GameDataStore {
           )).single['count']!
           as int;
 
-  Future<int> totalInventoryCount() async {
-    final result = await _db.rawQuery(
-      'SELECT COALESCE(SUM(quantity), 0) AS total FROM inventory',
-    );
-    return result.single['total']! as int;
-  }
-
   Future<void> saveBuild(SavedBuildRecord build) async {
     await _db.insert('saved_builds', {
       'id': build.id,
       'name': build.name,
       'recipe_json': jsonEncode(build.recipe),
       'created_at': build.createdAt.toIso8601String(),
+      'craft_goal': build.craftGoal,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -997,6 +906,7 @@ class GameDatabase implements GameDataStore {
                         as Map<String, dynamic>)
                     .map((key, value) => MapEntry(key, value as int)),
             createdAt: DateTime.parse(row['created_at']! as String),
+            craftGoal: row['craft_goal'] as String?,
           ),
         )
         .toList(growable: false);

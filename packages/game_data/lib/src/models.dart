@@ -537,59 +537,12 @@ class SavedBuildRecord {
     required this.name,
     required this.recipe,
     required this.createdAt,
+    this.craftGoal,
   });
   final String id;
   final String name;
   final Map<String, int> recipe;
   final DateTime createdAt;
-}
-
-class InventoryRecord {
-  const InventoryRecord({
-    required this.oreId,
-    required this.oreName,
-    required this.quantity,
-    required this.protectedQuantity,
-    required this.verificationStatus,
-    this.multiplier,
-    this.rarity,
-    this.confidence,
-    this.effectTags = const {},
-    this.effectActivationThresholds = const {},
-  });
-
-  final String oreId;
-  final String oreName;
-  final int quantity;
-  final int protectedQuantity;
-  final String verificationStatus;
-  final double? multiplier;
-  final String? rarity;
-  final double? confidence;
-  final Set<String> effectTags;
-  final Map<String, double> effectActivationThresholds;
-
-  factory InventoryRecord.fromMap(Map<String, Object?> row) => InventoryRecord(
-    oreId: row['ore_id']! as String,
-    oreName: row['ore_name']! as String,
-    quantity: row['quantity']! as int,
-    protectedQuantity: row['protected_quantity']! as int,
-    multiplier: (row['multiplier'] as num?)?.toDouble(),
-    rarity: row['rarity'] as String?,
-    confidence: (row['confidence'] as num?)?.toDouble(),
-    effectTags: ((row['effect_tags'] as String?) ?? '')
-        .split('|')
-        .where((tag) => tag.isNotEmpty)
-        .toSet(),
-    effectActivationThresholds: {
-      for (final part in ((row['effect_thresholds'] as String?) ?? '').split(
-        '|',
-      ))
-        if (part.contains(':') && double.tryParse(part.split(':').last) != null)
-          part.substring(0, part.lastIndexOf(':')): double.parse(
-            part.substring(part.lastIndexOf(':') + 1),
-          ),
-    },
-    verificationStatus: row['verification_status']! as String,
-  );
+  /// `WEAPON`, `ARMOR`, or null for legacy/unclassified recipes.
+  final String? craftGoal;
 }

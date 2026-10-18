@@ -76,7 +76,7 @@ void main() {
       expect(overallocated.traits.single.strength, 1.0);
     });
 
-    test('formula selection preserves alternative scaling hypotheses', () {
+    test('linear formula is explicitly selectable', () {
       const trait = OreTrait(
         id: 'trait',
         name: 'Trait',
@@ -90,22 +90,31 @@ void main() {
           id: 'traitScaling.linear.v1',
           name: 'Linear',
           version: '1',
-          source: 'ForgeOre community description',
+          source: 'Synthetic test fixture',
           verificationStatus: VerificationStatus.community,
           description: 'Linear from activation to full threshold.',
         ),
       );
-      const selection = [
-        OreAmount(ore: ore, quantity: 2),
-        OreAmount(ore: filler, quantity: 8),
+      final selection = [
+        const OreAmount(ore: ore, quantity: 18),
+        const OreAmount(ore: filler, quantity: 82),
       ];
-      final unresolved = calc.calculate(selection);
-      final selected = calc.calculate(
+      final linearResult = calc.calculate(
         selection,
         traitFormulaPolicy: linear,
       );
-      expect(unresolved.traits.single.strength, isNull);
-      expect(selected.traits.single.strength, closeTo(0.5, 1e-9));
+      expect(linearResult.traits.single.strength, closeTo(0.4, 1e-9));
+    });
+
+    test('probability lookup does not extrapolate an absent row', () {
+      const ore = OreDefinition(id: 'ore', name: 'Ore');
+      final result = calc.calculate(
+        const [OreAmount(ore: ore, quantity: 4)],
+        weaponOddsByOreCount: const {
+          3: {'Dagger': 1},
+        },
+      );
+      expect(result.weaponClassProbabilities, isNull);
     });
   });
 
@@ -226,51 +235,46 @@ void main() {
 
   group('Basic optimizer constraints', () {
     const optimizer = BasicOptimizer();
-    const stock = [
+    const catalog = [
       OptimizerOre(
         id: 'a',
         name: 'A',
-        available: 6,
-        protectedQuantity: 2,
+        maxPerRecipe: 4,
         multiplier: 2,
         dataConfidence: .8,
       ),
       OptimizerOre(
         id: 'b',
         name: 'B',
-        available: 4,
-        protectedQuantity: 0,
+        maxPerRecipe: 4,
         multiplier: 3,
         dataConfidence: .9,
       ),
       OptimizerOre(
         id: 'c',
         name: 'C',
-        available: 20,
-        protectedQuantity: 0,
+        maxPerRecipe: 20,
         multiplier: 10,
         dataConfidence: .2,
       ),
       OptimizerOre(
         id: 'd',
         name: 'D',
-        available: 8,
-        protectedQuantity: 0,
+        maxPerRecipe: 8,
         multiplier: 4,
         dataConfidence: .7,
       ),
       OptimizerOre(
         id: 'e',
         name: 'E',
-        available: 8,
-        protectedQuantity: 0,
+        maxPerRecipe: 8,
         multiplier: 5,
         dataConfidence: .7,
       ),
     ];
-    test('respects protected quantity, required and forbidden ores', () {
+    test('searches wiki catalog within recipe bounds and required/forbidden rules', () {
       final results = optimizer.optimize(
-        stock,
+        catalog,
         constraints: const OptimizerConstraints(
           requiredOres: {'a'},
           forbiddenOres: {'c'},
@@ -283,13 +287,19 @@ void main() {
       for (final result in results) {
         expect(result.recipe, contains('a'));
         expect(result.recipe, isNot(contains('c')));
-        expect(result.recipe['a'] ?? 0, lessThanOrEqualTo(4));
-        expect(result.remainingInventory['a'], 6 - (result.recipe['a'] ?? 0));
+        for (final entry in result.recipe.entries) {
+          expect(
+            entry.value,
+            lessThanOrEqualTo(
+              catalog.singleWhere((ore) => ore.id == entry.key).maxPerRecipe,
+            ),
+          );
+        }
       }
     });
     test('caps recipe at four ore types', () {
       final results = optimizer.optimize(
-        stock,
+        catalog,
         constraints: const OptimizerConstraints(
           minTotalOres: 5,
           maxTotalOres: 5,
@@ -302,7 +312,7 @@ void main() {
     test('propagates certainty dimensions and rankability', () {
       final result = optimizer
           .optimize(
-            stock,
+            catalog,
             constraints: const OptimizerConstraints(
               minTotalOres: 3,
               maxTotalOres: 3,
@@ -317,7 +327,7 @@ void main() {
     });
     test('does not rank unknown expected DPS inputs', () {
       final result = optimizer.optimize(
-        stock,
+        catalog,
         objective: OptimizerObjective.maxExpectedDps,
         constraints: const OptimizerConstraints(
           minTotalOres: 3,
@@ -337,16 +347,14 @@ void main() {
             OptimizerOre(
               id: 'flame',
               name: 'Flame Ore',
-              available: 4,
-              protectedQuantity: 0,
+              maxPerRecipe: 4,
               effectTags: {'burn'},
               effectActivationThresholds: {'burn': .5},
             ),
             OptimizerOre(
               id: 'plain',
               name: 'Plain Ore',
-              available: 4,
-              protectedQuantity: 0,
+              maxPerRecipe: 4,
             ),
           ],
           objective: OptimizerObjective.maxEffects,

@@ -6,7 +6,7 @@ class BasicOptimizer {
   const BasicOptimizer();
 
   List<OptimizerRecipe> optimize(
-    List<OptimizerOre> inventory, {
+    List<OptimizerOre> catalog, {
     OptimizerConstraints constraints = const OptimizerConstraints(),
     OptimizerObjective objective = OptimizerObjective.maxMultiplier,
     DpsInput? dpsTemplate,
@@ -22,16 +22,13 @@ class BasicOptimizer {
         constraints.maxTotalOres < constraints.minTotalOres) {
       throw ArgumentError('Invalid total ore bounds');
     }
-    final byId = {for (final ore in inventory) ore.id: ore};
-    if (constraints.requiredOres.any(
-      (id) => !byId.containsKey(id) || byId[id]!.craftable == 0,
-    ))
+    final byId = {for (final ore in catalog) ore.id: ore};
+    if (constraints.requiredOres.any((id) => !byId.containsKey(id)))
       return const [];
 
-    final candidates = inventory
+    final candidates = catalog
         .where(
-          (ore) =>
-              ore.craftable > 0 && !constraints.forbiddenOres.contains(ore.id),
+          (ore) => !constraints.forbiddenOres.contains(ore.id),
         )
         .toList();
     final results = <OptimizerRecipe>[];
@@ -125,7 +122,7 @@ class BasicOptimizer {
       if (chosen.any((ore) => ore.dataConfidence < 0.6)) {
         warnings.add('One or more input values have low data confidence.');
       }
-      final consumed = Map<String, int>.unmodifiable(recipe);
+      final recipeCounts = Map<String, int>.unmodifiable(recipe);
       final dataCertainty = chosen.fold<double>(
         1,
         (v, ore) => math.min(v, ore.dataConfidence.clamp(0.0, 1.0)),
@@ -133,14 +130,9 @@ class BasicOptimizer {
       final rankable = score.isFinite;
       results.add(
         OptimizerRecipe(
-          recipe: consumed,
+          recipe: recipeCounts,
           score: score,
           multiplier: multiplier,
-          consumedInventory: consumed,
-          remainingInventory: Map.unmodifiable({
-            for (final ore in inventory)
-              ore.id: ore.available - (recipe[ore.id] ?? 0),
-          }),
           warnings: List.unmodifiable(warnings),
           confidence: dataCertainty,
           whyThisResult: reason,
@@ -164,7 +156,7 @@ class BasicOptimizer {
         return;
       }
       final ore = selected[index];
-      final maxCount = math.min(ore.craftable, remaining);
+      final maxCount = math.min(ore.maxPerRecipe, remaining);
       final minCount = constraints.requiredOres.contains(ore.id) ? 1 : 0;
       for (var count = minCount; count <= maxCount; count++) {
         if (count > 0) recipe[ore.id] = count;
@@ -182,7 +174,7 @@ class BasicOptimizer {
           )) {
         final upper = math.min(
           constraints.maxTotalOres,
-          selected.fold<int>(0, (sum, ore) => sum + ore.craftable),
+          selected.fold<int>(0, (sum, ore) => sum + ore.maxPerRecipe),
         );
         for (var total = constraints.minTotalOres; total <= upper; total++) {
           generateCounts(selected, 0, total, {});

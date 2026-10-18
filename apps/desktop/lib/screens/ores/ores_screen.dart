@@ -39,8 +39,8 @@ class _OresPageState extends State<OresPage> {
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Wrap(spacing: 7, runSpacing: 5, crossAxisAlignment: WrapCrossAlignment.center, children: [AppText(ore.name, translate: false, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)), StatusBadge(ore.rarity ?? 'Unknown'), StatusBadge(ore.verificationStatus), ConfidenceBadge(ore.confidence)]),
                   const SizedBox(height: 6),
-                  AppText('Trait · ${ore.traits.isEmpty ? 'Unknown' : ore.traits.map((trait) => trait.name).join(', ')}', translate: false, style: const TextStyle(color: _muted, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  AppText('Source · ${ore.source}', translate: false, style: const TextStyle(color: _muted, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  AppText('Trait · ${ore.traits.isEmpty ? 'Unknown' : ore.traits.map((trait) => trait.name).join(', ')}', style: const TextStyle(color: _muted, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  AppText('Source · ${ore.source}', style: const TextStyle(color: _muted, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ])),
                 const SizedBox(width: 12),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [AppText(ore.multiplier?.toStringAsFixed(3) ?? 'Unknown', style: const TextStyle(color: _accent, fontSize: 16, fontWeight: FontWeight.w700)), AppText(ore.price == null ? 'Price unknown' : '\$${ore.price!.toStringAsFixed(0)}', style: const TextStyle(color: _muted, fontSize: 12))]),
@@ -59,15 +59,13 @@ class _OresPageState extends State<OresPage> {
       text: ore.multiplier?.toString() ?? '',
     );
     final price = TextEditingController(text: ore.price?.toString() ?? '');
-    final sourceName = TextEditingController(text: 'Manual entry');
-    final sourceUrl = TextEditingController();
+    final evidenceReference = TextEditingController();
     final notes = TextEditingController();
     final gameVersion = TextEditingController();
     final observedDate = TextEditingController(
       text: DateTime.now().toIso8601String().substring(0, 10),
     );
-    var sourceType = 'COMMUNITY';
-    var evidenceType = EvidenceType.webSource;
+    var evidenceType = EvidenceType.manualTranscription;
     final save = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -94,30 +92,6 @@ class _OresPageState extends State<OresPage> {
               ),
               const SizedBox(height: 10),
               TextField(
-                controller: sourceName,
-                decoration: InputDecoration(labelText: appLocalizedText(context, 'Source name')),
-              ),
-              const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: sourceType,
-                decoration: InputDecoration(labelText: appLocalizedText(context, 'Source type')),
-                items:
-                    const [
-                          'IN_GAME_MANUAL',
-                          'OFFICIAL',
-                          'COMMUNITY',
-                          'GUIDE',
-                          'EXTERNAL_CALCULATOR',
-                        ]
-                        .map(
-                          (type) =>
-                              DropdownMenuItem(value: type, child: AppText(type)),
-                        )
-                        .toList(),
-                onChanged: (value) => sourceType = value ?? 'COMMUNITY',
-              ),
-              const SizedBox(height: 10),
-              TextField(
                 controller: observedDate,
                 decoration: InputDecoration(
                   labelText: appLocalizedText(context, 'Observed date (YYYY-MM-DD)'),
@@ -132,16 +106,20 @@ class _OresPageState extends State<OresPage> {
               ),
               const SizedBox(height: 10),
               TextField(
-                controller: sourceUrl,
+                controller: evidenceReference,
                 decoration: InputDecoration(
-                  labelText: appLocalizedText(context, 'Evidence reference / URL'),
+                  labelText: appLocalizedText(context, 'Local evidence reference (relative path)'),
                 ),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<EvidenceType>(
                 initialValue: evidenceType,
                 decoration: InputDecoration(labelText: appLocalizedText(context, 'Evidence type')),
-                items: EvidenceType.values
+                items: const [
+                  EvidenceType.screenshot,
+                  EvidenceType.manualTranscription,
+                  EvidenceType.experiment,
+                ]
                     .map(
                       (type) =>
                           DropdownMenuItem(value: type, child: AppText(type.name)),
@@ -179,8 +157,7 @@ class _OresPageState extends State<OresPage> {
     if (save != true) {
       multiplier.dispose();
       price.dispose();
-      sourceName.dispose();
-      sourceUrl.dispose();
+      evidenceReference.dispose();
       notes.dispose();
       gameVersion.dispose();
       observedDate.dispose();
@@ -191,18 +168,24 @@ class _OresPageState extends State<OresPage> {
     );
     final parsedPrice = double.tryParse(price.text.replaceAll(',', '.'));
     final observedAt = DateTime.tryParse(observedDate.text.trim());
+    final localEvidenceRef = evidenceReference.text.trim();
+    final evidenceUri = Uri.tryParse(localEvidenceRef);
+    final unsafeEvidenceRef = localEvidenceRef.startsWith('/') ||
+        RegExp(r'^[A-Za-z]:[\\/]').hasMatch(localEvidenceRef) ||
+        (evidenceUri?.hasScheme ?? false) ||
+        localEvidenceRef.split(RegExp(r'[\\/]')).contains('..');
     if ((multiplier.text.trim().isNotEmpty &&
             (parsedMultiplier == null || parsedMultiplier < 0)) ||
         (price.text.trim().isNotEmpty &&
             (parsedPrice == null || parsedPrice < 0)) ||
-        observedAt == null) {
+        observedAt == null ||
+        unsafeEvidenceRef) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: AppText('Enter non-negative numeric values.')),
+        const SnackBar(content: AppText('Enter non-negative values and a relative local evidence path.')),
       );
       multiplier.dispose();
       price.dispose();
-      sourceName.dispose();
-      sourceUrl.dispose();
+      evidenceReference.dispose();
       notes.dispose();
       gameVersion.dispose();
       observedDate.dispose();
@@ -210,36 +193,29 @@ class _OresPageState extends State<OresPage> {
     }
     final stamp = observedAt;
     final enteredAt = DateTime.now();
-    final sourceId = 'manual-${enteredAt.microsecondsSinceEpoch}';
-    final candidateStatus = switch (sourceType) {
-      'GUIDE' || 'OFFICIAL' => 'GUIDE_LISTED',
-      'COMMUNITY' || 'EXTERNAL_CALCULATOR' => 'COMMUNITY',
-      _ => 'UNKNOWN',
-    };
-    final evidenceId = sourceUrl.text.trim().isEmpty
+    const sourceId = 'local-wiki-candidate';
+    const candidateStatus = 'UNKNOWN';
+    final evidenceId = localEvidenceRef.isEmpty
         ? null
-        : '$sourceId-evidence';
+        : '$sourceId-${enteredAt.microsecondsSinceEpoch}-evidence';
+    await widget.database.upsertDataSource(
+      const DataSourceRecord(
+        id: sourceId,
+        name: 'Local wiki candidate',
+        sourceType: 'LOCAL_CANDIDATE',
+      ),
+    );
     if (evidenceId != null) {
       await widget.database.saveEvidence(
         EvidenceRecord(
           id: evidenceId,
           type: evidenceType,
-          reference: sourceUrl.text.trim(),
+          reference: localEvidenceRef,
           capturedAt: enteredAt,
           notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
         ),
       );
     }
-    await widget.database.upsertDataSource(
-      DataSourceRecord(
-        id: sourceId,
-        name: sourceName.text.trim().isEmpty
-            ? 'Manual entry'
-            : sourceName.text.trim(),
-        sourceType: sourceType,
-        url: sourceUrl.text.trim().isEmpty ? null : sourceUrl.text.trim(),
-      ),
-    );
     for (final field in [
       ('multiplier', parsedMultiplier, multiplier.text),
       ('price', parsedPrice, price.text),
@@ -256,16 +232,14 @@ class _OresPageState extends State<OresPage> {
           sourceId: sourceId,
           observedAt: stamp,
           verificationStatus: candidateStatus,
-          evidenceReference: sourceUrl.text.trim().isEmpty
-              ? null
-              : sourceUrl.text.trim(),
+          evidenceReference: localEvidenceRef.isEmpty ? null : localEvidenceRef,
           evidenceId: evidenceId,
           gameVersion: gameVersion.text.trim().isEmpty
               ? null
               : gameVersion.text.trim(),
           reviewState: 'ENTERED',
           notes: notes.text.trim().isEmpty
-              ? 'Manual, not verified in game.'
+              ? 'Local wiki entry; not verified in game.'
               : notes.text.trim(),
         ),
       );
@@ -291,17 +265,14 @@ class _OresPageState extends State<OresPage> {
         rarity: ore.rarity,
         multiplier: resolvedMultiplier,
         price: parsedPrice ?? ore.price,
-        source: sourceName.text.trim().isEmpty
-            ? 'Manual entry'
-            : sourceName.text.trim(),
-        sourceUrl: sourceUrl.text.trim().isEmpty ? null : sourceUrl.text.trim(),
+        source: 'Local wiki',
+        sourceUrl: null,
         verificationStatus: resolvedStatus,
       ),
     );
     multiplier.dispose();
     price.dispose();
-    sourceName.dispose();
-    sourceUrl.dispose();
+    evidenceReference.dispose();
     notes.dispose();
     gameVersion.dispose();
     observedDate.dispose();

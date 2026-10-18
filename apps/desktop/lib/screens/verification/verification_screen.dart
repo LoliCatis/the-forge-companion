@@ -608,7 +608,7 @@ class _VerificationPageState extends State<VerificationPage> {
     final approved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: AppText('Review ${evidence.originalFilename ?? evidence.id}', translate: false),
+        title: AppText('Review ${evidence.originalFilename ?? evidence.id}'),
         content: SizedBox(
           width: 640,
           child: Column(
@@ -637,8 +637,8 @@ class _VerificationPageState extends State<VerificationPage> {
                     for (final item in card)
                       ListTile(
                         dense: true,
-                        title: AppText('${item.entityId} · ${item.fieldName}', translate: false),
-                        subtitle: AppText('${item.value} · ${item.reviewState}', translate: false),
+                        title: AppText('${item.entityId} · ${item.fieldName}'),
+                        subtitle: AppText('${item.value} · ${item.reviewState}'),
                       ),
                   ],
                 ),
@@ -796,7 +796,7 @@ class _VerificationPageState extends State<VerificationPage> {
             IconButton(
               tooltip: appLocalizedText(context, 'Export verified overlay'),
               onPressed: _exportVerifiedOverlay,
-              icon: const Icon(Icons.inventory_2_outlined),
+              icon: const Icon(Icons.file_download_outlined),
             ),
           ],
         )),
@@ -804,7 +804,7 @@ class _VerificationPageState extends State<VerificationPage> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: AppText(
-              _error!,
+              'Error: $_error',
               style: const TextStyle(color: Colors.orangeAccent),
             ),
           ),
@@ -1197,6 +1197,7 @@ class _VerificationPageState extends State<VerificationPage> {
                   value: e,
                   child: AppText(
                     e.originalFilename ?? e.id,
+                    translate: false,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

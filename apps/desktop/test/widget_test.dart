@@ -23,8 +23,6 @@ class _DashboardStore extends Fake implements GameDataStore {
         domainTotal: {},
       );
   @override
-  Future<List<InventoryRecord>> getInventory({DataPolicy policy = DataPolicy.bestAvailable}) async => [];
-  @override
   Future<List<SavedBuildRecord>> getSavedBuilds() async => [];
   @override
   Future<List<OreRecord>> searchOres(String query, {DataPolicy policy = DataPolicy.bestAvailable}) async => [];
@@ -46,6 +44,8 @@ class _DashboardStore extends Fake implements GameDataStore {
   Future<ResolvedField> resolveField({required String entityType, required String entityId, required String fieldName, DataPolicy policy = DataPolicy.bestAvailable}) async => const ResolvedField(preferred: null, alternatives: [], conflicting: false, incomplete: true);
   @override
   Future<List<WeaponVariantRecord>> getWeaponVariants({String? classId}) async => [];
+  @override
+  Future<List<WeaponClassRecord>> getWeaponClasses() async => [];
   @override
   Future<ProbabilityTableRecord?> getProbabilityTable(String id) async => null;
 }
@@ -99,14 +99,14 @@ class _VerificationStore extends _DashboardStore {
 class _LocalizationStore extends _DashboardStore {
   @override
   Future<List<OreRecord>> searchOres(String query, {DataPolicy policy = DataPolicy.bestAvailable}) async =>
-      query.isEmpty || 'test ore'.contains(query.toLowerCase())
+      query.isEmpty || 'aite'.contains(query.toLowerCase())
       ? const [
           OreRecord(
-            id: 'test-ore',
-            name: 'Test Ore',
+            id: 'aite',
+            name: 'Aite',
             rarity: 'Epic',
-            multiplier: 2.25,
-            price: 12.75,
+            multiplier: 1.1,
+            price: 16.5,
             source: 'community',
             verificationStatus: 'COMMUNITY',
             confidence: 0.6,
@@ -115,36 +115,24 @@ class _LocalizationStore extends _DashboardStore {
       : [];
 
   @override
-  Future<List<InventoryRecord>> getInventory({DataPolicy policy = DataPolicy.bestAvailable}) async => const [
-    InventoryRecord(
-      oreId: 'test-ore',
-      oreName: 'Test Ore',
-      quantity: 3,
-      protectedQuantity: 0,
-      verificationStatus: 'COMMUNITY',
-      multiplier: 2.25,
-      rarity: 'Epic',
-      confidence: 0.6,
-    ),
-  ];
-
-  @override
   Future<List<SavedBuildRecord>> getSavedBuilds() async => [
     SavedBuildRecord(
       id: 'user-recipe',
       name: 'Dashboard',
-      recipe: const {'test-ore': 3},
+      recipe: const {'aite': 3},
       createdAt: DateTime.utc(2026, 10, 17),
     ),
   ];
 }
 
 void main() {
-  test('bundled bootstrap pack manifest is available to the app', () async {
+  test('bundled composite ore wiki manifest is available to the app', () async {
     final manifest = await rootBundle.loadString(
-      'assets/packs/2026.10.17-bootstrap.1/manifest.json',
+      'assets/packs/2026.10.17-composite.1/manifest.json',
     );
-    expect(manifest, contains('2026.10.17-bootstrap.1'));
+    expect(manifest, contains('2026.10.17-composite.1'));
+    expect(manifest, contains('USER_CONFIRMED_CAPTURE'));
+    expect(manifest, contains('Unknown; live game observed'));
   });
 
   testWidgets('opens the desktop dashboard with source status', (tester) async {
@@ -159,7 +147,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('Your forge at a glance'), findsOneWidget);
-    expect(find.text('Inventory'), findsWidgets);
+    expect(find.text('Inventory'), findsNothing);
+    expect(find.text('Optimizer'), findsNothing);
+    expect(find.text('Ore entries in catalog'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -185,7 +175,7 @@ void main() {
           appDirectory: appDirectory,
         ),
       );
-      await _pumpForUi(tester);
+      await tester.pumpAndSettle();
     }
 
     Future<void> chooseLanguage(
@@ -193,66 +183,63 @@ void main() {
       required String settingsLabel,
     }) async {
       await tester.tap(find.text(settingsLabel).first);
-      await _pumpForUi(tester);
-      final languageCode = label == 'Русский' ? 'ru' : 'en';
-      final dropdown = tester.widget<DropdownButtonFormField<String>>(
-        find.byType(DropdownButtonFormField<String>),
-      );
-      await tester.runAsync(() async {
-        dropdown.onChanged?.call(languageCode);
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-        return true;
-      });
-      await _pumpForUi(tester);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
     }
 
     await pumpApp();
-    expect(find.text('Dashboard'), findsWidgets);
+    expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Your forge at a glance'), findsOneWidget);
-    expect(
-      await _runAsync(
-        tester,
-        () => File('${appDirectory.path}/ui-language.txt').exists(),
-      ),
-      isFalse,
-    );
+    expect(await File('${appDirectory.path}/ui-language.txt').exists(), isFalse);
 
     await chooseLanguage('Русский', settingsLabel: 'Settings');
+    await _waitForFileContents(
+      tester,
+      File('${appDirectory.path}/ui-language.txt'),
+      'ru',
+    );
     expect(find.text('Обзор'), findsOneWidget);
     expect(find.text('Настройки'), findsWidgets);
     await tester.tap(find.text('Обзор').first);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     expect(find.text('Кузница: обзор'), findsOneWidget);
     expect(
-      await _waitForFileContents(
+      await _runAsync(
         tester,
-        File('${appDirectory.path}/ui-language.txt'),
-        'ru',
+        () => File('${appDirectory.path}/ui-language.txt').readAsString(),
       ),
       'ru',
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await pumpApp();
-    await _pumpUntilText(tester, find.text('Кузница: обзор'));
+    await _waitForLocalizedWidget(tester, find.text('Кузница: обзор'));
     expect(find.text('Кузница: обзор'), findsOneWidget);
     await chooseLanguage('English', settingsLabel: 'Настройки');
-    expect(find.text('Dashboard'), findsWidgets);
+    await _waitForFileContents(
+      tester,
+      File('${appDirectory.path}/ui-language.txt'),
+      'en',
+    );
+    expect(find.text('Dashboard'), findsOneWidget);
     expect(find.text('Settings'), findsWidgets);
     await tester.tap(find.text('Dashboard').first);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(
-      await _waitForFileContents(
+      await _runAsync(
         tester,
-        File('${appDirectory.path}/ui-language.txt'),
-        'en',
+        () => File('${appDirectory.path}/ui-language.txt').readAsString(),
       ),
       'en',
     );
 
     await tester.pumpWidget(const SizedBox.shrink());
     await pumpApp();
+    await _waitForLocalizedWidget(tester, find.text('Your forge at a glance'));
     expect(find.text('Your forge at a glance'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -264,40 +251,49 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final appDirectory = await _runAsync(
-      tester,
-      () => Directory.systemTemp.createTemp('forge-russian-layout-'),
+    final appDirectory = await Directory.systemTemp.createTemp(
+      'forge-russian-layout-',
     );
-    addTearDown(
-      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
-    );
+    addTearDown(() => appDirectory.delete(recursive: true));
     await tester.pumpWidget(
       ForgeCompanionApp(
         database: _DashboardStore(),
         appDirectory: appDirectory,
       ),
     );
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Settings').first);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Русский').last);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
 
     for (final label in [
       'Обзор',
-      'Инвентарь',
       'Кузница',
-      'Оптимизатор',
       'Сравнение',
+    ]) {
+      await tester.tap(find.text(label).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'screen: $label');
+    }
+    await tester.tap(find.text('ДАННЫЕ / ВИКИ').first);
+    await tester.pumpAndSettle();
+    for (final label in [
       'Руды',
       'Состояние данных',
-      'Проверка',
+      'Проверка вики',
+    ]) {
+      await tester.tap(find.text(label).first);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'screen: $label');
+    }
+    for (final label in [
       'Настройки',
     ]) {
       await tester.tap(find.text(label).first);
-      await _pumpForUi(tester);
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'screen: $label');
     }
   });
@@ -309,61 +305,52 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final appDirectory = await _runAsync(
-      tester,
-      () => Directory.systemTemp.createTemp('forge-russian-data-labels-'),
+    final appDirectory = await Directory.systemTemp.createTemp(
+      'forge-russian-data-labels-',
     );
-    addTearDown(
-      () => _runAsync(tester, () => appDirectory.delete(recursive: true)),
-    );
+    addTearDown(() => appDirectory.delete(recursive: true));
     await tester.pumpWidget(
       ForgeCompanionApp(
         database: _LocalizationStore(),
         appDirectory: appDirectory,
       ),
     );
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Settings').first);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>));
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Русский').last);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Инвентарь').first);
-    await _pumpForUi(tester);
-    expect(find.text('Test Ore'), findsOneWidget);
-    expect(find.text('2.250×'), findsOneWidget);
-
+    await tester.tap(find.text('ДАННЫЕ / ВИКИ').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Руды').first);
-    await _pumpForUi(tester);
-    expect(find.text('Test Ore'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Aite'), findsOneWidget);
 
     await tester.tap(find.text('Сравнение').first);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     expect(find.text('Dashboard'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('dashboard and inventory fit a 1280 by 720 window', (tester) async {
+  testWidgets('dashboard, forge, and embedded composition search fit a 1280 by 720 window', (tester) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ForgeCompanionApp(database: _DashboardStore()));
-    await _pumpForUi(tester);
-    expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Inventory').first);
-    await _pumpForUi(tester);
-    expect(find.text('Available to forge'), findsOneWidget);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('Forge').first);
-    await _pumpForUi(tester);
-    expect(find.text('Current recipe'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Test recipe'), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.tap(find.text('Optimizer').first);
-    await _pumpForUi(tester);
-    expect(find.text('Build optimizer'), findsOneWidget);
+    await tester.tap(find.text('Find ore composition'));
+    await tester.pumpAndSettle();
+    expect(find.text('Suggested ore compositions'), findsOneWidget);
+    expect(find.text('No rankable mixes. Add multiplier values to the catalog first.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -378,7 +365,7 @@ void main() {
       tester.view.physicalSize = viewport.size;
       tester.view.devicePixelRatio = viewport.ratio;
       await tester.pumpWidget(ForgeCompanionApp(database: database));
-      await _pumpForUi(tester);
+      await tester.pumpAndSettle();
       expect(find.text('Open Forge'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
@@ -396,12 +383,14 @@ void main() {
         evidenceDirectory: Directory.systemTemp,
       ),
     );
-    await _pumpForUi(tester);
-    await tester.tap(find.text('Verification').first);
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('DATA / RESEARCH').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Wiki review').first);
+    await tester.pumpAndSettle();
     expect(find.text('Session queue'), findsOneWidget);
     await tester.tap(find.text('New session'));
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(
         TextField,
@@ -410,32 +399,9 @@ void main() {
       'Update test 1',
     );
     await tester.tap(find.text('Create'));
-    await _pumpForUi(tester);
+    await tester.pumpAndSettle();
     expect(find.textContaining('Update test 1 · Ore'), findsOneWidget);
   });
-}
-
-Future<void> _pumpForUi(WidgetTester tester) async {
-  await tester.pump();
-  for (var frame = 0; frame < 5; frame++) {
-    await tester.pump(const Duration(milliseconds: 100));
-  }
-}
-
-Future<void> _pumpUntilText(
-  WidgetTester tester,
-  Finder finder, {
-  Duration timeout = const Duration(seconds: 3),
-}) async {
-  final deadline = DateTime.now().add(timeout);
-  while (DateTime.now().isBefore(deadline)) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 25)),
-    );
-    await tester.pump();
-    if (finder.evaluate().isNotEmpty) return;
-  }
-  throw TestFailure('Timed out waiting for localized widget: $finder');
 }
 
 Future<T> _runAsync<T>(
@@ -454,11 +420,25 @@ Future<String> _waitForFileContents(
 ) => _runAsync(tester, () async {
   final deadline = DateTime.now().add(const Duration(seconds: 3));
   while (DateTime.now().isBefore(deadline)) {
-    if (await file.exists()) {
-      final contents = await file.readAsString();
-      if (contents == expected) return contents;
+    if (await file.exists() && await file.readAsString() == expected) {
+      return expected;
     }
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
   throw StateError('Timed out waiting for ${file.path} to contain $expected');
 });
+
+Future<void> _waitForLocalizedWidget(
+  WidgetTester tester,
+  Finder finder,
+) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 3));
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 25)),
+    );
+    await tester.pump();
+    if (finder.evaluate().isNotEmpty) return;
+  }
+  throw TestFailure('Timed out waiting for localized widget: $finder');
+}

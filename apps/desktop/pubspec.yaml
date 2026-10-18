@@ -39,6 +39,7 @@ dependencies:
   game_data:
     path: ../../packages/game_data
   path: ^1.9.1
+  xml: ^7.0.1
   file_selector: ^1.1.0
   desktop_drop: ^0.8.4
   image: ^4.12.0

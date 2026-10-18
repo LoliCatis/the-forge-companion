@@ -32,27 +32,32 @@ class _OptimizerPageState extends State<OptimizerPage> {
   @override
   Widget build(BuildContext context) => _Page(
     title: 'Build optimizer',
-    subtitle: 'Searches craftable inventory mixes; unknown data cannot improve a score.',
-    child: FutureBuilder<List<InventoryRecord>>(
-      future: widget.database.getInventory(),
+    subtitle: 'Ranks hypothetical ore mixes using values in the catalog.',
+    child: FutureBuilder<List<OreRecord>>(
+      future: widget.database.searchOres(''),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const LinearProgressIndicator();
+        final min = int.tryParse(_minCount.text) ?? 3;
+        final max = int.tryParse(_maxCount.text) ?? 51;
         final input = snapshot.data!
             .map(
-              (item) => OptimizerOre(
-                id: item.oreId,
-                name: item.oreName,
-                available: item.quantity,
-                protectedQuantity: item.protectedQuantity,
-                multiplier: item.multiplier,
-                dataConfidence: item.confidence ?? 0,
-                effectTags: item.effectTags,
-                effectActivationThresholds: item.effectActivationThresholds,
+              (ore) => OptimizerOre(
+                id: ore.id,
+                name: ore.name,
+                maxPerRecipe: max.clamp(1, 1000).toInt(),
+                multiplier: ore.multiplier,
+                dataConfidence: ore.confidence ?? 0,
+                effectTags: ore.traits
+                    .map((trait) => trait.effectType ?? trait.name)
+                    .toSet(),
+                effectActivationThresholds: {
+                  for (final trait in ore.traits)
+                    if (trait.activationThreshold != null)
+                      (trait.effectType ?? trait.name): trait.activationThreshold!,
+                },
               ),
             )
             .toList(growable: false);
-        final min = int.tryParse(_minCount.text) ?? 3;
-        final max = int.tryParse(_maxCount.text) ?? 51;
         final constraints = OptimizerConstraints(
           requiredOres: _list(_required.text),
           forbiddenOres: _list(_forbidden.text),
@@ -133,7 +138,7 @@ class _OptimizerPageState extends State<OptimizerPage> {
                       controller: _required,
                       decoration: InputDecoration(
                         labelText: appLocalizedText(context, 'Required ore IDs'),
-                        hintText: appLocalizedText(context, 'ore-one, ore-two'),
+                        hintText: appLocalizedText(context, 'tin, quartz'),
                         isDense: true,
                       ),
                       onChanged: (_) => setState(() {}),
@@ -170,13 +175,13 @@ class _OptimizerPageState extends State<OptimizerPage> {
             _Notice(
               icon: Icons.tune,
               text:
-                      'Objective: ${_objective.name}. Protected quantities are reserved. Up to four ore types. DPS objectives are hidden until verified weapon and effect inputs are available.',
+                      'Objective: ${_objective.name}. Recipes use the full ore catalog and hypothetical quantities, up to four ore types. DPS objectives are hidden until verified weapon and effect inputs are available.',
             ),
             const SizedBox(height: 12),
             _Surface(
               child: results.isEmpty
                   ? const AppText(
-                      'No rankable recipes. Add inventory and source-aware multipliers in Ores; DPS objectives also require verified weapon and effect inputs.',
+                      'No rankable recipes. Add source-aware multiplier candidates in Ores; DPS objectives also require verified weapon and effect inputs.',
                       style: TextStyle(color: _muted, fontSize: 12),
                     )
                   : _optimizerResults(context, results.toList(), input),
@@ -190,7 +195,7 @@ class _OptimizerPageState extends State<OptimizerPage> {
   Widget _optimizerResults(BuildContext context, List<OptimizerRecipe> results, List<OptimizerOre> input) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const SectionHeader('Ranked recipes', subtitle: 'Protected quantities stay reserved from every suggestion.'),
+      const SectionHeader('Ranked recipes', subtitle: 'Hypothetical mixes from the ore catalog.'),
       const SizedBox(height: 10),
       for (final entry in results.asMap().entries) ...[
         AppCard(accent: entry.key == 0, padding: const EdgeInsets.fromLTRB(15, 12, 12, 12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -229,7 +234,7 @@ class _OptimizerPageState extends State<OptimizerPage> {
       recipe: recipe.recipe,
       resolvedObservationIds: observationIds,
       formulaIds: const ['ore.weighted-average.v1'],
-      assumptions: const {'objective': 'inventory mix', 'craftProbability': 'not modeled'},
+      assumptions: const {'objective': 'ore mix', 'quantities': 'hypothetical', 'craftProbability': 'not modeled'},
       resolvedInputs: {'oreMultipliers': {for (final oreId in recipe.recipe.keys) oreId: input.firstWhere((ore) => ore.id == oreId).multiplier}},
       calculationResult: {'score': recipe.score, 'weightedMultiplier': recipe.multiplier, 'rankable': recipe.rankable},
       dataCertainty: recipe.dataCertainty,

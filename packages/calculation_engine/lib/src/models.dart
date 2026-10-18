@@ -254,8 +254,7 @@ class OptimizerOre {
   const OptimizerOre({
     required this.id,
     required this.name,
-    required this.available,
-    required this.protectedQuantity,
+    this.maxPerRecipe = 51,
     this.multiplier,
     this.dataConfidence = 0,
     this.effectTags = const {},
@@ -263,13 +262,12 @@ class OptimizerOre {
   });
   final String id;
   final String name;
-  final int available;
-  final int protectedQuantity;
+  /// Search bound for this recipe, not a quantity owned by a player.
+  final int maxPerRecipe;
   final double? multiplier;
   final double dataConfidence;
   final Set<String> effectTags;
   final Map<String, double> effectActivationThresholds;
-  int get craftable => (available - protectedQuantity).clamp(0, available);
 }
 
 class OptimizerConstraints {
@@ -296,8 +294,6 @@ class OptimizerRecipe {
     required this.recipe,
     required this.score,
     required this.multiplier,
-    required this.consumedInventory,
-    required this.remainingInventory,
     required this.warnings,
     required this.confidence,
     required this.whyThisResult,
@@ -310,8 +306,6 @@ class OptimizerRecipe {
   final Map<String, int> recipe;
   final double score;
   final double? multiplier;
-  final Map<String, int> consumedInventory;
-  final Map<String, int> remainingInventory;
   final List<String> warnings;
   final double confidence;
   final String whyThisResult;

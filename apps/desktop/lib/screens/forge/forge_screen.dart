@@ -15,7 +15,10 @@ class _ForgePageState extends State<ForgePage> {
   final _attackInterval = TextEditingController();
   String _traitFormula = 'unknown';
   DataPolicy _dataPolicy = DataPolicy.bestAvailable;
+  String _craftGoal = 'WEAPON';
+  String _weaponClassId = 'dagger';
   String? _weaponId;
+  bool _showCompositionSearch = false;
   @override
   void dispose() {
     for (final item in _counts) {
@@ -30,21 +33,22 @@ class _ForgePageState extends State<ForgePage> {
   @override
   Widget build(BuildContext context) => _Page(
     title: 'Forge calculator',
-    subtitle: 'Build a mix and inspect what can be calculated from the data you have.',
+    subtitle: 'Build and compare hypothetical mixes from the full ore catalog.',
     child: FutureBuilder<List<Object?>>(
       future: _loadForgeData(widget.database, _dataPolicy),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const LinearProgressIndicator();
         final ores = snapshot.data![0] as List<OreRecord>;
         final weapons = snapshot.data![1] as List<WeaponVariantRecord>;
-        final classTable = snapshot.data![2] as ProbabilityTableRecord?;
-        final variantTable = snapshot.data![3] as ProbabilityTableRecord?;
-        final oreFields = snapshot.data![4] as Map<String, ResolvedField>;
-        final weaponFields = snapshot.data![5] as Map<String, ResolvedField>;
-        final inventory = snapshot.data![6] as List<InventoryRecord>;
+        final weaponClasses = snapshot.data![2] as List<WeaponClassRecord>;
+        final classTable = snapshot.data![3] as ProbabilityTableRecord?;
+        final variantTable = snapshot.data![4] as ProbabilityTableRecord?;
+        final oreFields = snapshot.data![5] as Map<String, ResolvedField>;
+        final weaponFields = snapshot.data![6] as Map<String, ResolvedField>;
         final selectedWeapon = weapons
-            .where((weapon) => weapon.id == _weaponId)
+            .where((weapon) => weapon.id == _weaponId && weapon.classId == _weaponClassId)
             .firstOrNull;
+        final classWeapons = weapons.where((weapon) => weapon.classId == _weaponClassId).toList();
         final selected = <OreAmount>[];
         for (var i = 0; i < 4; i++) {
           final ore = ores.where((item) => item.id == _ids[i]).firstOrNull;
@@ -100,13 +104,33 @@ class _ForgePageState extends State<ForgePage> {
             );
           }
         }
+        final compositionCandidates = _showCompositionSearch
+            ? const BasicOptimizer().optimize(
+          ores.map((ore) => OptimizerOre(
+            id: ore.id,
+            name: ore.name,
+            // Internal per-recipe search bound, not player inventory.
+            maxPerRecipe: 12,
+            multiplier: _resolvedNumber(oreFields[ore.id], _dataPolicy == DataPolicy.verifiedOnly ? null : ore.multiplier),
+            dataConfidence: ore.confidence ?? 0,
+            effectTags: ore.traits.map((trait) => trait.effectType ?? trait.name).toSet(),
+            effectActivationThresholds: {
+              for (final trait in ore.traits)
+                if (trait.activationThreshold != null)
+                  (trait.effectType ?? trait.name): trait.activationThreshold!,
+            },
+          )).toList(growable: false),
+          constraints: const OptimizerConstraints(minTotalOres: 3, maxTotalOres: 12, maxOreTypes: 4, maxEvaluations: 4000),
+                objective: OptimizerObjective.maxMultiplier,
+              ).where((recipe) => recipe.rankable).toList(growable: false)
+            : const <OptimizerRecipe>[];
         final formulaPolicy = switch (_traitFormula) {
           'linear' => const TraitFormulaPolicy(
             formula: FormulaDefinition(
               id: 'traitScaling.linear.v1',
               name: 'Linear scaling',
               version: '1',
-              source: 'ForgeOre / community guide description',
+              source: 'Unverified community description',
               verificationStatus: VerificationStatus.community,
               description: 'Linear from activation to full threshold.',
             ),
@@ -251,6 +275,87 @@ class _ForgePageState extends State<ForgePage> {
                 icon: Icons.warning_amber,
                 text: 'INCOMPLETE · Required verified inputs are missing; community values are withheld for this calculation.',
               ),
+            _Surface(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  const AppText('CRAFT GOAL', style: TextStyle(fontWeight: FontWeight.w700)),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'WEAPON', label: AppText('Weapon'), icon: Icon(Icons.gps_fixed)),
+                      ButtonSegment(value: 'ARMOR', label: AppText('Armor'), icon: Icon(Icons.shield_outlined)),
+                    ],
+                    selected: {_craftGoal},
+                    onSelectionChanged: (value) => setState(() {
+                      _craftGoal = value.first;
+                      _weaponId = null;
+                      if (_craftGoal == 'ARMOR') {
+                        _baseDamage.clear();
+                        _attackInterval.clear();
+                      }
+                    }),
+                  ),
+                  if (_craftGoal == 'WEAPON') ...[
+                    SizedBox(
+                      width: 220,
+                      child: DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: weaponClasses.any((item) => item.id == _weaponClassId) ? _weaponClassId : null,
+                        decoration: const InputDecoration(labelText: 'Weapon type', isDense: true),
+                        items: weaponClasses.where((item) => item.forgeAvailable).map((item) => DropdownMenuItem(value: item.id, child: AppText(item.name))).toList(),
+                        onChanged: (value) => setState(() {
+                          _weaponClassId = value ?? '';
+                          _weaponId = null;
+                          _baseDamage.clear();
+                          _attackInterval.clear();
+                        }),
+                      ),
+                    ),
+                    if (classWeapons.isNotEmpty)
+                      SizedBox(
+                        width: 240,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: classWeapons.any((item) => item.id == _weaponId) ? _weaponId : null,
+                          decoration: const InputDecoration(labelText: 'Stats source (optional)', isDense: true),
+                          hint: const AppText('Unknown until selected'),
+                          items: classWeapons.map((weapon) => DropdownMenuItem(value: weapon.id, child: AppText(weapon.name))).toList(),
+                          onChanged: (value) => setState(() => _weaponId = value),
+                        ),
+                      ),
+                  ] else
+                    const AppText('Armor class and defense data: Unknown', style: TextStyle(color: _muted)),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _showCompositionSearch = !_showCompositionSearch),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: AppText(_showCompositionSearch ? 'Hide composition search' : 'Find ore composition'),
+                  ),
+                ],
+              ),
+            ),
+            if (_showCompositionSearch)
+              _Surface(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const SectionHeader('Suggested ore compositions', subtitle: 'Ranks available multiplier values only; it does not predict weapon or armor stats.'),
+                const SizedBox(height: 8),
+                if (compositionCandidates.isEmpty)
+                  const AppText('No rankable mixes. Add multiplier values to the catalog first.', style: TextStyle(color: _muted))
+                else
+                  for (final candidate in compositionCandidates.take(3))
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: AppText(candidate.recipe.entries.map((entry) => '${ores.firstWhere((ore) => ore.id == entry.key).name} ×${entry.value}').join(' · '), translate: false),
+                      subtitle: AppText('Estimated ore multiplier: ${candidate.multiplier?.toStringAsFixed(3) ?? 'Unknown'}'),
+                      trailing: TextButton(onPressed: () => setState(() {
+                        for (var i = 0; i < 4; i++) {
+                          final entry = i < candidate.recipe.entries.length ? candidate.recipe.entries.elementAt(i) : null;
+                          _ids[i] = entry?.key;
+                          _counts[i].text = entry?.value.toString() ?? '3';
+                        }
+                      }), child: const AppText('Use mix')),
+                    ),
+              ])),
             LayoutBuilder(builder: (context, constraints) {
               final compact = constraints.maxWidth < 1300;
               final recipeWidth = compact ? constraints.maxWidth : (constraints.maxWidth - 14) * .60;
@@ -265,17 +370,8 @@ class _ForgePageState extends State<ForgePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SectionHeader('Current recipe', subtitle: 'Select up to four ore types and set each amount.'),
+                        const SectionHeader('Test recipe', subtitle: 'Select any catalog ores and set hypothetical amounts.'),
                         const SizedBox(height: 10),
-                        if (inventory.any((item) => item.quantity > item.protectedQuantity)) ...[
-                          const AppText('Available inventory', style: TextStyle(color: _muted, fontSize: 12)),
-                          const SizedBox(height: 5),
-                          Wrap(spacing: 6, runSpacing: 4, children: [
-                            for (final item in inventory.where((item) => item.quantity > item.protectedQuantity).take(16))
-                              OreChip(label: '${item.oreName} · ${(item.quantity - item.protectedQuantity).clamp(0, item.quantity)}', selected: _ids.contains(item.oreId), onTap: _ids.contains(item.oreId) ? null : () => setState(() { final slot = _ids.indexWhere((id) => id == null); if (slot >= 0) _ids[slot] = item.oreId; })),
-                          ]),
-                          const SizedBox(height: 10),
-                        ],
                         for (var i = 0; i < 4; i++)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 9),
@@ -352,9 +448,6 @@ class _ForgePageState extends State<ForgePage> {
                                     value: 'linear',
                                     child: AppText('Linear 10% → 30%'),
                                   ),
-                                  DropdownMenuItem(
-                                    child: AppText('Alternate code formula'),
-                                  ),
                                 ],
                                 onChanged: (value) => setState(
                                   () => _traitFormula = value ?? 'unknown',
@@ -389,6 +482,7 @@ class _ForgePageState extends State<ForgePage> {
                                               amount.ore.id: amount.quantity,
                                           },
                                           createdAt: DateTime.now(),
+                                          craftGoal: _craftGoal,
                                         ),
                                       );
                                       final snapshotId = 'calc-$id';
@@ -586,22 +680,19 @@ class _ForgePageState extends State<ForgePage> {
                               ? 'At least one ore has no multiplier'
                               : 'Estimated from selected values',
                         ),
+                        if (_craftGoal == 'WEAPON') ...[
                         const Divider(height: 19),
                         _ResultLine(
-                          'Weapon class odds',
-                          applicableClassTable?.entries.entries
-                                  .map(
-                                    (entry) =>
-                                        '${entry.key}: ${(entry.value * 100).toStringAsFixed(1)}%',
-                                  )
-                                  .join('\n') ??
-                              'Unknown',
+                          'Selected weapon type chance',
+                          applicableClassTable?.entries[_weaponClassId] == null
+                              ? 'Unknown'
+                              : '${(applicableClassTable!.entries[_weaponClassId]! * 100).toStringAsFixed(1)}%',
                           applicableClassTable == null
                               ? 'No table for ${result.totalOres} ores'
                               : '${applicableClassTable.verificationStatus} · raw sum ${applicableClassTable.sourceSum.toStringAsFixed(4)} · ${applicableClassTable.normalizedForEstimate ? 'normalized estimate' : 'source values'}',
                         ),
-                        const Divider(height: 19),
-                        _ResultLine(
+                        if (_weaponClassId == 'dagger') const Divider(height: 19),
+                        if (_weaponClassId == 'dagger') _ResultLine(
                           'Dagger variant odds',
                           applicableVariantTable?.entries.entries
                                   .map(
@@ -611,15 +702,15 @@ class _ForgePageState extends State<ForgePage> {
                                   .join('\n') ??
                               'Unknown',
                           applicableVariantTable == null
-                              ? 'Available for the 3-ore demonstration recipe'
+                              ? 'Unknown for this composition'
                               : '${applicableVariantTable.verificationStatus} · raw sum ${applicableVariantTable.sourceSum.toStringAsFixed(4)} · ${applicableVariantTable.normalizedForEstimate ? 'normalized estimate' : 'source values'}',
                         ),
-                        const Divider(height: 19),
-                        const _ResultLine(
-                          'Armor class odds',
-                          'Unknown',
-                          'No current verified probability table',
-                        ),
+                        ],
+                        if (_craftGoal == 'ARMOR') ...[
+                          const Divider(height: 19),
+                          const _ResultLine('Armor class odds', 'Unknown', 'No current verified probability table'),
+                          const _ResultLine('Armor defense', 'Unknown', 'No verified armor stats are available'),
+                        ],
                         const Divider(height: 19),
                         const _ResultLine(
                           'Craft quality',
@@ -627,31 +718,9 @@ class _ForgePageState extends State<ForgePage> {
                           'Quality formula is not established',
                         ),
                         const Divider(height: 19),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedWeapon?.id,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: appLocalizedText(context, 'Weapon stats source'),
-                            isDense: true,
-                          ),
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: null,
-                              child: AppText('Manual scenario'),
-                            ),
-                            ...weapons.map(
-                              (weapon) => DropdownMenuItem(
-                                value: weapon.id,
-                                child: AppText(
-                                  '${weapon.name} · ${weapon.verificationStatus}',
-                                ),
-                              ),
-                            ),
-                          ],
-                          onChanged: (value) =>
-                              setState(() => _weaponId = value),
-                        ),
-                        if (selectedWeapon != null)
+                        if (_craftGoal == 'WEAPON' && selectedWeapon == null)
+                          const AppText('Weapon stats: Unknown until a variant is selected above.', style: TextStyle(color: _muted)),
+                        if (_craftGoal == 'WEAPON' && selectedWeapon != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 5),
                             child: AppText(
@@ -662,7 +731,7 @@ class _ForgePageState extends State<ForgePage> {
                               ),
                             ),
                           ),
-                        if (selectedWeapon != null)
+                        if (_craftGoal == 'WEAPON' && selectedWeapon != null)
                           Wrap(
                             spacing: 4,
                             children: [
@@ -689,7 +758,7 @@ class _ForgePageState extends State<ForgePage> {
                               ),
                             ],
                           ),
-                        Row(
+                        if (_craftGoal == 'WEAPON') Row(
                           children: [
                             Expanded(
                               child: TextField(
@@ -722,21 +791,21 @@ class _ForgePageState extends State<ForgePage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        _ResultLine(
+                        if (_craftGoal == 'WEAPON') const SizedBox(height: 10),
+                        if (_craftGoal == 'WEAPON') _ResultLine(
                           'Attacks per second',
                           dps.attacksPerSecond?.toStringAsFixed(3) ?? 'Unknown',
                           '1 / attack interval',
                         ),
-                        const Divider(height: 16),
-                        _ResultLine(
+                        if (_craftGoal == 'WEAPON') const Divider(height: 16),
+                        if (_craftGoal == 'WEAPON') _ResultLine(
                           'Raw DPS',
                           dps.rawDps?.toStringAsFixed(2) ?? 'Unknown',
                           selectedWeapon == null
                               ? 'Manual scenario input'
                               : '${selectedWeapon.verificationStatus} weapon stats × estimated ore multiplier',
                         ),
-                        _ResultLine(
+                        if (_craftGoal == 'WEAPON') _ResultLine(
                           'Expected DPS',
                           'Unknown',
                           dps.unknownContributions.join(' · ').toUpperCase(),
@@ -849,8 +918,8 @@ Future<List<Object?>> _loadForgeData(
   DataPolicy policy,
 ) async {
   final ores = await database.searchOres('', policy: policy);
-  final inventory = await database.getInventory(policy: policy);
-  final weapons = await database.getWeaponVariants(classId: 'dagger');
+  final weapons = await database.getWeaponVariants();
+  final weaponClasses = await database.getWeaponClasses();
   final oreFields = <String, ResolvedField>{};
   for (final ore in ores) {
     oreFields[ore.id] = await database.resolveField(
@@ -875,7 +944,7 @@ Future<List<Object?>> _loadForgeData(
   final variantTable = await database.getProbabilityTable(
     'dagger-variants-3-ores',
   );
-  return [ores, weapons, classTable, variantTable, oreFields, weaponFields, inventory];
+  return [ores, weapons, weaponClasses, classTable, variantTable, oreFields, weaponFields];
 }
 
 Widget _fieldInspectorButton(

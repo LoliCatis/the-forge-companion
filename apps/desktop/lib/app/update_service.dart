@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:xml/xml.dart' as xml;
 
 const appBuildCommit = String.fromEnvironment(
   'APP_COMMIT_SHA',
@@ -123,10 +124,19 @@ class AppUpdateService {
         '/repos/$_repository/releases',
         {'per_page': '100'},
       );
-      final releasesBody = await _getText(client, releasesUri);
-      final decoded = jsonDecode(releasesBody);
-      if (decoded is! List) {
-        throw const FormatException('GitHub returned an invalid releases list.');
+      late final List<dynamic> decoded;
+      try {
+        final releasesBody = await _getText(client, releasesUri);
+        final apiReleases = jsonDecode(releasesBody);
+        if (apiReleases is! List) {
+          throw const FormatException('GitHub returned an invalid releases list.');
+        }
+        decoded = apiReleases;
+      } on _RateLimited {
+        decoded = await _getPublicReleaseFallback(
+          client,
+          currentVersion: currentVersion,
+        );
       }
 
       final candidates = selectCompatibleAppReleases(
@@ -176,7 +186,10 @@ class AppUpdateService {
 
     final manifestUrl = _githubAssetUrl(candidate.manifestAsset);
     final manifestDigest = _sha256FromAsset(candidate.manifestAsset);
-    final manifestText = await _getText(client, manifestUrl);
+    final cachedManifest = candidate.manifestAsset['_verifiedText'];
+    final manifestText = cachedManifest is String
+        ? cachedManifest
+        : await _getText(client, manifestUrl);
     if (sha256.convert(utf8.encode(manifestText)).toString() != manifestDigest) {
       throw const FormatException(
         'The Windows update manifest failed its GitHub SHA-256 check.',
@@ -545,10 +558,16 @@ HttpClient _newHttpClient() => HttpClient()
   ..connectionTimeout = const Duration(seconds: 15)
   ..idleTimeout = const Duration(seconds: 30);
 
-Future<String> _getText(HttpClient client, Uri uri) async {
+Future<String> _getText(
+  HttpClient client,
+  Uri uri, {
+  String accept = 'application/vnd.github+json',
+}) async {
   final request = await client.getUrl(uri).timeout(const Duration(seconds: 30));
-  request.headers.set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
-  request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+  request.headers.set(HttpHeaders.acceptHeader, accept);
+  if (uri.host == 'api.github.com') {
+    request.headers.set('X-GitHub-Api-Version', '2022-11-28');
+  }
   final response = await request.close().timeout(const Duration(seconds: 60));
   if (response.statusCode != HttpStatus.ok) {
     throw _httpStatusError(response.statusCode, uri: uri);
@@ -561,7 +580,7 @@ Future<String> _getText(HttpClient client, Uri uri) async {
 
 Exception _httpStatusError(int statusCode, {required Uri uri}) {
   if (statusCode == HttpStatus.forbidden || statusCode == 429) {
-    return const HttpException(
+    return const _RateLimited(
       'GitHub rate limit reached. Wait a little and check for updates again.',
     );
   }
@@ -573,6 +592,207 @@ Exception _httpStatusError(int statusCode, {required Uri uri}) {
     uri: uri,
   );
 }
+
+class _RateLimited implements Exception {
+  const _RateLimited(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+/// Parses published releases from GitHub's public Atom feed. Only newer
+/// alpha/beta tags for the configured repository with one identifiable commit
+/// are returned; assets are resolved and verified separately.
+List<Map<String, dynamic>> parsePublicReleaseFeed(
+  String feedText, {
+  required String currentVersion,
+}) {
+  final current = AppReleaseVersion.tryParse(currentVersion);
+  if (current == null) {
+    throw const FormatException('Current build version cannot be compared.');
+  }
+  final feed = xml.XmlDocument.parse(feedText);
+  final entries = feed.descendants
+      .whereType<xml.XmlElement>()
+      .where((element) => element.name.local == 'entry');
+  final releases = <Map<String, dynamic>>[];
+  for (final entry in entries) {
+    String? childText(String name) => entry.children
+        .whereType<xml.XmlElement>()
+        .where((element) => element.name.local == name)
+        .map((element) => element.innerText)
+        .firstOrNull;
+
+    final alternateLink = entry.children
+        .whereType<xml.XmlElement>()
+        .where((element) => element.name.local == 'link')
+        .where((element) => element.getAttribute('rel') == 'alternate')
+        .map((element) => element.getAttribute('href'))
+        .whereType<String>()
+        .firstOrNull;
+    final releaseUrl = alternateLink == null
+        ? null
+        : Uri.tryParse(alternateLink);
+    if (releaseUrl == null || !_releaseUrlIsConfiguredRepo(releaseUrl)) {
+      continue;
+    }
+    final tag = releaseUrl.pathSegments[4];
+    final version = AppReleaseVersion.tryParse(tag);
+    if (version == null || version.compareTo(current) <= 0) continue;
+
+    final releaseNotesHtml = childText('content') ?? '';
+    final commits = RegExp(
+      r"""href=["']https://github\.com/LoliCatis/the-forge-companion/commit/([0-9a-f]{40})(?:/hovercard)?["']""",
+    ).allMatches(releaseNotesHtml).map((match) => match[1]!).toSet();
+    if (commits.length != 1) continue;
+    final commit = commits.single;
+    releases.add({
+      'tag_name': tag,
+      'draft': false,
+      'prerelease': true,
+      'name': childText('title') ?? version.toString(),
+      'body': 'Commit SHA: $commit\n\n${_plainReleaseNotes(releaseNotesHtml)}',
+      'html_url': releaseUrl.toString(),
+      'assets': <Map<String, dynamic>>[],
+    });
+  }
+  return releases;
+}
+
+Future<List<dynamic>> _getPublicReleaseFallback(
+  HttpClient client, {
+  required String currentVersion,
+}) async {
+  final feedText = await _getText(
+    client,
+    Uri.https('github.com', '/$_repository/releases.atom'),
+    accept: 'application/atom+xml',
+  );
+  final releases = parsePublicReleaseFeed(
+    feedText,
+    currentVersion: currentVersion,
+  );
+  for (final release in releases) {
+    try {
+      final tag = release['tag_name']! as String;
+      final assetsHtml = await _getText(
+        client,
+        Uri.https('github.com', '/$_repository/releases/expanded_assets/$tag'),
+        accept: 'text/html',
+      );
+      final assets = _parsePublicReleaseAssets(assetsHtml, tag);
+      final zipAsset = assets[_expectedAssetName];
+      final manifestAsset = assets[_manifestAssetName];
+      if (zipAsset == null || manifestAsset == null) continue;
+
+      final manifestText = await _getText(client, _githubAssetUrl(manifestAsset));
+      if (sha256.convert(utf8.encode(manifestText)).toString() !=
+          _sha256FromAsset(manifestAsset)) {
+        continue;
+      }
+      final manifest = jsonDecode(manifestText);
+      final version = AppReleaseVersion.tryParse(tag)!;
+      final commit = _releaseCommit(release);
+      if (manifest is! Map<String, dynamic> ||
+          manifest['platform'] != 'windows-x64' ||
+          manifest['assetName'] != _expectedAssetName ||
+          manifest['version'] != version.toString() ||
+          manifest['commit'] != commit ||
+          manifest['sha256'] != _sha256FromAsset(zipAsset) ||
+          manifest['size'] is! int ||
+          (manifest['size'] as int) <= 0 ||
+          (manifest['size'] as int) > _maxUpdateBytes) {
+        continue;
+      }
+      zipAsset['size'] = manifest['size'];
+      manifestAsset['_verifiedText'] = manifestText;
+      release['assets'] = [zipAsset, manifestAsset];
+    } on _AssetNotFound {
+      continue;
+    } on FormatException {
+      continue;
+    }
+  }
+  return releases;
+}
+
+bool _releaseUrlIsConfiguredRepo(Uri uri) =>
+    uri.scheme == 'https' &&
+    uri.host == 'github.com' &&
+    uri.userInfo.isEmpty &&
+    uri.port == 443 &&
+    !uri.hasQuery &&
+    !uri.hasFragment &&
+    uri.pathSegments.length == 5 &&
+    uri.pathSegments[0] == 'LoliCatis' &&
+    uri.pathSegments[1] == 'the-forge-companion' &&
+    uri.pathSegments[2] == 'releases' &&
+    uri.pathSegments[3] == 'tag';
+
+Map<String, Map<String, dynamic>> _parsePublicReleaseAssets(
+  String html,
+  String tag,
+) {
+  final assets = <String, Map<String, dynamic>>{};
+  final rows = RegExp(r'<li\b[^>]*>(.*?)</li>', caseSensitive: false, dotAll: true)
+      .allMatches(html);
+  for (final row in rows) {
+    final content = row[1]!;
+    final link = RegExp(
+      r'<a\b[^>]*href="([^"]+)"[^>]*>.*?<span\b[^>]*class="text-bold"[^>]*>([^<]+)</span>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(content);
+    if (link == null) continue;
+    final name = _decodeHtmlText(link[2]!.trim());
+    if (name != _expectedAssetName && name != _manifestAssetName) continue;
+    final url = Uri.tryParse('https://github.com${link[1]!}');
+    if (url == null || !_assetUrlMatches(url, tag, name)) continue;
+    final digest = RegExp(
+      r'<clipboard-copy\b[^>]*\bvalue="(sha256:[0-9a-f]{64})"',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(content)?[1];
+    if (digest == null) continue;
+    assets[name] = {
+      'name': name,
+      'browser_download_url': url.toString(),
+      'digest': digest.toLowerCase(),
+      if (name == _expectedAssetName) 'size': 1,
+    };
+  }
+  return assets;
+}
+
+bool _assetUrlMatches(Uri uri, String tag, String name) =>
+    uri.scheme == 'https' &&
+    uri.host == 'github.com' &&
+    uri.userInfo.isEmpty &&
+    uri.port == 443 &&
+    !uri.hasQuery &&
+    !uri.hasFragment &&
+    uri.pathSegments.length == 6 &&
+    uri.pathSegments[0] == 'LoliCatis' &&
+    uri.pathSegments[1] == 'the-forge-companion' &&
+    uri.pathSegments[2] == 'releases' &&
+    uri.pathSegments[3] == 'download' &&
+    uri.pathSegments[4] == tag &&
+    uri.pathSegments[5] == name;
+
+String _decodeHtmlText(String value) => value
+    .replaceAll('&amp;', '&')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&apos;', "'");
+
+String _plainReleaseNotes(String html) => _decodeHtmlText(
+  html
+      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'</p\s*>', caseSensitive: false), '\n')
+      .replaceAll(RegExp(r'<[^>]*>'), ''),
+).trim();
 
 class _AssetNotFound implements Exception {
   const _AssetNotFound(this.message);
@@ -589,9 +809,16 @@ Uri _githubAssetUrl(Map<String, dynamic> asset) {
   final uri = Uri.parse(raw);
   if (uri.scheme != 'https' ||
       uri.host != 'github.com' ||
-      !uri.path.startsWith(
-        '/LoliCatis/the-forge-companion/releases/download/',
-      )) {
+      uri.userInfo.isNotEmpty ||
+      uri.port != 443 ||
+      uri.hasQuery ||
+      uri.hasFragment ||
+      uri.pathSegments.length != 6 ||
+      uri.pathSegments[0] != 'LoliCatis' ||
+      uri.pathSegments[1] != 'the-forge-companion' ||
+      uri.pathSegments[2] != 'releases' ||
+      uri.pathSegments[3] != 'download' ||
+      asset['name'] != uri.pathSegments[5]) {
     throw const FormatException(
       'Release assets must belong to the configured GitHub repository.',
     );
@@ -657,12 +884,19 @@ List<AppUpdateCandidate> selectCompatibleAppReleases(
     if (version == null || assets is! List || version.compareTo(current) <= 0) {
       continue;
     }
+    final releaseUrl = item['html_url'];
+    if (releaseUrl is! String ||
+        !_releaseUrlMatchesTag(releaseUrl, tag as String)) {
+      continue;
+    }
     final assetRows = assets.whereType<Map<String, dynamic>>();
     final zipAsset = assetRows
         .where((asset) => asset['name'] == _expectedAssetName)
+        .where((asset) => _assetMatchesRelease(asset, tag as String))
         .firstOrNull;
     final manifestAsset = assetRows
         .where((asset) => asset['name'] == _manifestAssetName)
+        .where((asset) => _assetMatchesRelease(asset, tag as String))
         .firstOrNull;
     if (zipAsset == null || manifestAsset == null) continue;
     final commit = _releaseCommit(item);
@@ -693,6 +927,19 @@ List<AppUpdateCandidate> selectCompatibleAppReleases(
   }
   candidates.sort((a, b) => b.version.compareTo(a.version));
   return List.unmodifiable(candidates);
+}
+
+bool _releaseUrlMatchesTag(String raw, String tag) {
+  final uri = Uri.tryParse(raw);
+  return uri != null &&
+      _releaseUrlIsConfiguredRepo(uri) &&
+      uri.pathSegments[4] == tag;
+}
+
+bool _assetMatchesRelease(Map<String, dynamic> asset, String tag) {
+  final raw = asset['browser_download_url'];
+  return raw is String &&
+      _assetUrlMatches(Uri.tryParse(raw) ?? Uri(), tag, asset['name'] as String? ?? '');
 }
 
 const _installScript = r'''

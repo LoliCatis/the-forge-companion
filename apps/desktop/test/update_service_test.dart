@@ -89,6 +89,67 @@ void main() {
       );
       expect(candidates, isEmpty);
     });
+
+    test('rejects release assets attached to a different tag', () {
+      final release = _release('v0.1.0-alpha.10', commit: _commit('b'));
+      (release['assets'] as List).first['browser_download_url'] =
+          'https://github.com/LoliCatis/the-forge-companion/releases/download/v0.1.0-alpha.9/the-forge-companion-windows-alpha.zip';
+      expect(
+        selectCompatibleAppReleases(
+          [release],
+          currentCommit: _commit('a'),
+          currentVersion: '0.1.0-alpha.9',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('rejects a release page URL that does not match its tag', () {
+      final release = _release('v0.1.0-alpha.10', commit: _commit('b'));
+      release['html_url'] =
+          'https://github.com/LoliCatis/the-forge-companion/releases/tag/v0.1.0-alpha.9';
+      expect(
+        selectCompatibleAppReleases(
+          [release],
+          currentCommit: _commit('a'),
+          currentVersion: '0.1.0-alpha.9',
+        ),
+        isEmpty,
+      );
+    });
+  });
+
+  test('public release feed accepts only newer tags from configured repo', () {
+    final currentCommit = _commit('a');
+    final nextCommit = _commit('b');
+    final feed = '''
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>v0.1.0-alpha.10</title>
+    <link rel="alternate" href="https://github.com/LoliCatis/the-forge-companion/releases/tag/v0.1.0-alpha.10" />
+    <content type="html">&lt;p&gt;Commit SHA: &lt;a href=&quot;https://github.com/LoliCatis/the-forge-companion/commit/$nextCommit&quot;&gt;$nextCommit&lt;/a&gt;&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>v0.1.0-alpha.11</title>
+    <link rel="alternate" href="https://github.com/other/project/releases/tag/v0.1.0-alpha.11" />
+    <content type="html">&lt;p&gt;Commit SHA: &lt;a href=&quot;https://github.com/other/project/commit/${_commit('c')}&quot;&gt;commit&lt;/a&gt;&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>v0.1.0-alpha.8</title>
+    <link rel="alternate" href="https://github.com/LoliCatis/the-forge-companion/releases/tag/v0.1.0-alpha.8" />
+    <content type="html">&lt;p&gt;Commit SHA: &lt;a href=&quot;https://github.com/LoliCatis/the-forge-companion/commit/$currentCommit&quot;&gt;$currentCommit&lt;/a&gt;&lt;/p&gt;</content>
+  </entry>
+</feed>
+''';
+
+    final releases = parsePublicReleaseFeed(
+      feed,
+      currentVersion: '0.1.0-alpha.9',
+    );
+
+    expect(releases, hasLength(1));
+    expect(releases.single['tag_name'], 'v0.1.0-alpha.10');
+    expect(releases.single['body'], contains('Commit SHA: $nextCommit'));
   });
 
   test('safe ZIP staging path rejects traversal and absolute paths', () {
@@ -122,6 +183,8 @@ Map<String, dynamic> _release(
   bool includeManifest = true,
 }) => {
   'tag_name': tag,
+  'html_url':
+      'https://github.com/LoliCatis/the-forge-companion/releases/tag/$tag',
   'draft': draft,
   'prerelease': prerelease,
   'body': 'Commit SHA: $commit',

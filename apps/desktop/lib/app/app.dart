@@ -21,7 +21,6 @@ part 'navigation.dart';
 part '../widgets/page_layout.dart';
 part '../widgets/common.dart';
 part '../screens/dashboard/dashboard_screen.dart';
-part '../screens/inventory/inventory_screen.dart';
 part '../screens/forge/forge_screen.dart';
 part '../screens/optimizer/optimizer_screen.dart';
 part '../screens/compare/compare_screen.dart';

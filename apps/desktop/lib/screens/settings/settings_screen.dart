@@ -62,7 +62,7 @@ class _SettingsPageState extends State<_SettingsPage> {
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 180),
                   child: SingleChildScrollView(
-                    child: AppText(update.releaseNotes),
+                    child: AppText(update.releaseNotes, translate: false),
                   ),
                 ),
               ],
@@ -131,7 +131,7 @@ class _SettingsPageState extends State<_SettingsPage> {
           AppText('Storage', style: TextStyle(fontWeight: FontWeight.w700)),
           SizedBox(height: 8),
           AppText(
-            'Inventory, recipes, observations, and data source records are stored locally in SQLite.',
+            'Ore catalog, recipes, observations, and data source records are stored locally in SQLite.',
             style: TextStyle(color: _muted),
           ),
           SizedBox(height: 16),

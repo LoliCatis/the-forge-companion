@@ -33,19 +33,9 @@ abstract interface class GameDataStore {
   });
   Future<void> upsertDataSource(DataSourceRecord source);
   Future<void> upsertOre(OreRecord ore);
-  Future<List<InventoryRecord>> getInventory({
-    DataPolicy policy = DataPolicy.bestAvailable,
-  });
-  Future<void> setInventoryQuantity(
-    String oreId,
-    int quantity, {
-    int protectedQuantity = 0,
-  });
-  Future<void> setProtectedQuantity(String oreId, int protectedQuantity);
   Future<int> countByVerificationStatus(String status);
   Future<int> countObservationsByVerificationStatus(String status);
   Future<int> countAllOres();
-  Future<int> totalInventoryCount();
   Future<void> saveBuild(SavedBuildRecord build);
   Future<List<SavedBuildRecord>> getSavedBuilds();
   Future<void> deleteBuild(String id);
