@@ -409,7 +409,9 @@ Future<T> _runAsync<T>(
   Future<T> Function() callback,
 ) async {
   final result = await tester.runAsync(callback);
-  if (result == null) throw StateError('Widget test async operation failed.');
+  if (result == null && T != void) {
+    throw StateError('Widget test async operation failed.');
+  }
   return result as T;
 }
 
