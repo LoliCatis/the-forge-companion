@@ -886,17 +886,17 @@ List<AppUpdateCandidate> selectCompatibleAppReleases(
     }
     final releaseUrl = item['html_url'];
     if (releaseUrl is! String ||
-        !_releaseUrlMatchesTag(releaseUrl, tag as String)) {
+        !_releaseUrlMatchesTag(releaseUrl, tag)) {
       continue;
     }
     final assetRows = assets.whereType<Map<String, dynamic>>();
     final zipAsset = assetRows
         .where((asset) => asset['name'] == _expectedAssetName)
-        .where((asset) => _assetMatchesRelease(asset, tag as String))
+        .where((asset) => _assetMatchesRelease(asset, tag))
         .firstOrNull;
     final manifestAsset = assetRows
         .where((asset) => asset['name'] == _manifestAssetName)
-        .where((asset) => _assetMatchesRelease(asset, tag as String))
+        .where((asset) => _assetMatchesRelease(asset, tag))
         .firstOrNull;
     if (zipAsset == null || manifestAsset == null) continue;
     final commit = _releaseCommit(item);
